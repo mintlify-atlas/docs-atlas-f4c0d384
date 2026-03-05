@@ -1,0 +1,113 @@
+{
+  "projectType": "saas",
+  "projectName": "Threadly",
+  "projectDescription": "A feature-rich native Android social media application with real-time messaging, stories, and reels.",
+  "theme": "almond",
+  "primaryColor": "#3338d5",
+  "lightColor": "#d44d56",
+  "darkColor": null,
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "introduction",
+              "features"
+            ]
+          },
+          {
+            "group": "Getting Started",
+            "pages": [
+              "getting-started/prerequisites",
+              "getting-started/installation",
+              "getting-started/backend-setup",
+              "getting-started/firebase-setup"
+            ]
+          },
+          {
+            "group": "Core Features",
+            "pages": [
+              "features/authentication",
+              "features/social-feed",
+              "features/reels",
+              "features/messaging",
+              "features/stories",
+              "features/media-creation"
+            ]
+          },
+          {
+            "group": "Architecture",
+            "pages": [
+              "architecture/overview",
+              "architecture/mvvm-pattern",
+              "architecture/project-structure",
+              "architecture/database"
+            ]
+          },
+          {
+            "group": "Development",
+            "pages": [
+              "development/tech-stack",
+              "development/networking",
+              "development/real-time-communication",
+              "development/offline-support"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Network Managers",
+            "pages": [
+              "api/auth-manager",
+              "api/posts-manager",
+              "api/message-manager",
+              "api/profile-manager"
+            ]
+          },
+          {
+            "group": "Models",
+            "pages": [
+              "api/models/posts-model",
+              "api/models/profile-model",
+              "api/models/stories-model"
+            ]
+          },
+          {
+            "group": "Utilities",
+            "pages": [
+              "api/utilities/exoplayer-util",
+              "api/utilities/connectivity-util",
+              "api/utilities/permission-util"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Secure authentication with OTP verification",
+    "Dynamic social feed with images, videos, and stories",
+    "Real-time messaging with Socket.IO and FCM fallback",
+    "TikTok-style reels with ExoPlayer",
+    "Custom camera implementation with CameraX",
+    "Offline support with Room Database",
+    "Social interactions: likes, comments, shares, follow/unfollow"
+  ],
+  "publicApiSurface": [
+    "AuthManager - Authentication APIs",
+    "PostsManager - Post CRUD operations",
+    "MessageManager - Real-time messaging",
+    "ProfileManager - User profile management",
+    "StoriesManager - Stories functionality",
+    "LikeManager - Post interactions",
+    "CommentsManager - Comment system",
+    "FollowManager - Follow/unfollow system",
+    "SearchManager - User and content search"
+  ]
+}
