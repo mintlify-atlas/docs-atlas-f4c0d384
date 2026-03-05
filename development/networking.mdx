@@ -55,14 +55,18 @@ Threadly organizes API calls into domain-specific manager classes:
 |---------|----------------|-------------|
 | **PostsManager** | Posts CRUD operations | `uploadImagePost()`, `getImageFeed()`, `getUserPosts()` |
 | **MessageManager** | Messaging operations | `sendMessage()`, `checkAndGetPendingMessages()` |
-| **AuthManager** | Authentication | Login, registration, OTP verification |
+| **AuthManager** | Authentication | Login, registration, password reset |
+| **OtpManager** | OTP verification | `sendOTP()`, `verifyOTP()` |
 | **ProfileManager** | User profiles | `getProfile()`, `getLoggedInUserProfile()` |
+| **ProfileEditorManager** | Profile editing | `updateProfile()`, `uploadProfilePicture()` |
 | **LikeManager** | Like/unlike actions | `likePost()`, `unlikePost()` |
 | **FollowManager** | Follow relationships | `follow()`, `unfollow()`, `getFollowers()` |
 | **CommentsManager** | Comment operations | `getComments()`, `addComment()` |
 | **StoriesManager** | Stories feature | `addStory()`, `getStories()` |
 | **SearchManager** | Search functionality | User and content search |
+| **UserSuggestionManager** | User recommendations | `getSuggestedUsers()` |
 | **PrivacyManager** | Privacy settings | `setPrivate()`, `setPublic()` |
+| **FcmManager** | Push notifications | `registerToken()`, `updateFcmToken()` |
 
 Location: `network_managers/` directory
 
