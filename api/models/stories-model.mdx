@@ -1,0 +1,123 @@
+---
+title: 'Stories Models'
+description: 'Data models for stories and story media in Threadly'
+---
+
+## Overview
+
+Threadly uses two models to represent stories:
+- `StoriesModel`: Represents a user's story collection
+- `StoryMediaModel`: Represents individual story media items
+
+---
+
+## StoriesModel
+
+Represents a user's story collection that appears in the stories tray.
+
+### Fields
+
+<ResponseField name="userid" type="string" required>
+  ID of the user who posted the story
+</ResponseField>
+
+<ResponseField name="userProfile" type="string" required>
+  URL to the user's profile picture (displayed in the story ring)
+</ResponseField>
+
+<ResponseField name="isSeen" type="boolean" required>
+  Whether the current user has seen this user's stories
+</ResponseField>
+
+### Example
+
+```json
+{
+  "userid": "user_123",
+  "userProfile": "https://example.com/profiles/user_123.jpg",
+  "isSeen": false
+}
+```
+
+---
+
+## StoryMediaModel
+
+Represents an individual story media item (image or video) within a user's story collection.
+
+### Fields
+
+<ResponseField name="userId" type="string" required>
+  ID of the user who posted this story
+</ResponseField>
+
+<ResponseField name="storyId" type="int" required>
+  Unique identifier for this story media item
+</ResponseField>
+
+<ResponseField name="storyUrl" type="string" required>
+  URL to the story media content (image or video)
+</ResponseField>
+
+<ResponseField name="isVideo" type="boolean" required>
+  Whether the story is a video (`true`) or image (`false`)
+</ResponseField>
+
+<ResponseField name="createdAt" type="string" required>
+  Timestamp when the story was created
+</ResponseField>
+
+<ResponseField name="isLiked" type="boolean" required>
+  Whether the current user has liked this story
+</ResponseField>
+
+### Methods
+
+- `getUserId()`: Get the user ID
+- `getStoryId()`: Get the story ID
+- `getStoryUrl()`: Get the media URL
+- `isVideo()`: Check if story is a video
+- `getCreatedAt()`: Get creation timestamp
+- `isLiked()`: Check if user liked the story
+- `setLiked(boolean)`: Update the liked status
+
+### Constructor
+
+The `StoryMediaModel` constructor accepts:
+```java
+StoryMediaModel(String userId, int storyId, String storyUrl, 
+                String type, String createdAt, int isLiked)
+```
+
+Where `type` should be either `"video"` or `"image"` and is automatically converted to the boolean `isVideo` field.
+
+### Example
+
+```json
+{
+  "userId": "user_123",
+  "storyId": 789,
+  "storyUrl": "https://example.com/stories/789.jpg",
+  "isVideo": false,
+  "createdAt": "2024-03-15T10:30:00Z",
+  "isLiked": true
+}
+```
+
+---
+
+## Usage Pattern
+
+These models are typically used together:
+
+1. **Stories Tray**: Display a list of `StoriesModel` objects showing which users have active stories
+2. **Story Viewer**: When a user taps on a story, fetch the associated `StoryMediaModel` items for that user
+3. **Story Ring**: Use `isSeen` from `StoriesModel` to determine the visual state of the story ring (seen vs unseen)
+
+## Usage Notes
+
+- Stories are typically ephemeral content that expires after 24 hours
+- The `isSeen` field in `StoriesModel` helps distinguish between viewed and new stories in the UI
+- The `isLiked` field in `StoryMediaModel` is derived from an integer value during construction (>0 = true)
+- The `isVideo` field is determined by checking if the type string equals "video"
+- All other type strings default to `isVideo = false` (treated as images)

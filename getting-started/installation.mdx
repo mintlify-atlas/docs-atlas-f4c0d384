@@ -1,0 +1,201 @@
+---
+title: Installation
+description: Clone the repository and set up Threadly in Android Studio
+---
+
+Follow these steps to get Threadly up and running on your local development machine.
+
+## Clone the Repository
+
+<Steps>
+  <Step title="Clone via HTTPS">
+    Open your terminal and run:
+    
+    ```bash
+    git clone https://github.com/rashidekbal/threadly.git
+    ```
+  </Step>
+
+  <Step title="Navigate to project directory">
+    ```bash
+    cd threadly
+    ```
+  </Step>
+</Steps>
+
+<AccordionGroup>
+  <Accordion title="Alternative: Clone via SSH">
+    If you have SSH keys configured with GitHub:
+    
+    ```bash
+    git clone git@github.com:rashidekbal/threadly.git
+    cd threadly
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Open in Android Studio
+
+<Steps>
+  <Step title="Launch Android Studio">
+    Open Android Studio on your machine.
+  </Step>
+
+  <Step title="Open the project">
+    - Select **File > Open** from the menu
+    - Navigate to the `threadly` directory you just cloned
+    - Click **OK** to open the project
+  </Step>
+
+  <Step title="Wait for Gradle sync">
+    Android Studio will automatically start syncing Gradle. This process:
+    - Downloads project dependencies
+    - Configures the build system
+    - Indexes the project files
+    
+    <Note>
+    The first sync may take several minutes depending on your internet connection and machine specs.
+    </Note>
+  </Step>
+</Steps>
+
+## Verify Project Configuration
+
+After Gradle sync completes, verify your project setup:
+
+<CodeGroup>
+```gradle app/build.gradle
+android {
+    namespace 'com.rtech.threadly'
+    compileSdk 36
+    
+    defaultConfig {
+        applicationId "com.rtech.threadly"
+        minSdk 29
+        targetSdk 36
+        versionCode 1
+        versionName "1.2"
+    }
+    
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+}
+```
+</CodeGroup>
+
+<Check>
+**Sync successful?** Your project is ready for the next steps.
+</Check>
+
+## Configure Build Variants
+
+Threadly comes with two build variants:
+
+### Debug Build
+- Pre-configured with hosted backend URLs
+- Suitable for development and testing
+- No additional configuration needed
+
+### Release Build
+- Optimized for production
+- Configure signing keys for distribution
+
+<Tip>
+For initial setup, use the **debug** build variant which is selected by default.
+</Tip>
+
+## Build the Project
+
+<Steps>
+  <Step title="Select build variant">
+    In Android Studio:
+    - Open **Build > Select Build Variant**
+    - Choose **debug** from the dropdown
+  </Step>
+
+  <Step title="Build the app">
+    Click **Build > Make Project** or press:
+    - **Windows/Linux**: `Ctrl + F9`
+    - **macOS**: `Cmd + F9`
+  </Step>
+
+  <Step title="Wait for build to complete">
+    Monitor the **Build** tab at the bottom of Android Studio for progress and any errors.
+  </Step>
+</Steps>
+
+## Run the App
+
+<Steps>
+  <Step title="Connect a device or start an emulator">
+    <Tabs>
+      <Tab title="Physical Device">
+        1. Enable **Developer Options** on your Android device
+        2. Enable **USB Debugging**
+        3. Connect via USB cable
+        4. Verify device appears in Android Studio's device dropdown
+      </Tab>
+      
+      <Tab title="Emulator">
+        1. Open **Device Manager** in Android Studio
+        2. Create a new virtual device (if needed)
+        3. Choose a device with API level 29 or higher
+        4. Start the emulator
+      </Tab>
+    </Tabs>
+  </Step>
+
+  <Step title="Run the app">
+    Click the **Run** button (green play icon) or press:
+    - **Windows/Linux**: `Shift + F10`
+    - **macOS**: `Control + R`
+  </Step>
+
+  <Step title="Wait for app to launch">
+    The app will:
+    - Install on your device/emulator
+    - Launch automatically
+    - Display the splash screen
+  </Step>
+</Steps>
+
+<Warning>
+Before you can fully use the app, you need to configure the backend and Firebase. Continue to the next sections.
+</Warning>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Gradle sync failed">
+    1. Check your internet connection
+    2. Try **File > Invalidate Caches / Restart**
+    3. Verify JDK 11 is properly configured
+    4. Check Android Studio's error messages for specific issues
+  </Accordion>
+
+  <Accordion title="Build errors">
+    - Ensure you have the latest Android SDK components installed
+    - Verify `compileSdk 36` is available in SDK Manager
+    - Clean and rebuild: **Build > Clean Project** then **Build > Rebuild Project**
+  </Accordion>
+
+  <Accordion title="App crashes on launch">
+    - Verify you've completed [Backend Setup](/getting-started/backend-setup)
+    - Check Logcat for error messages
+    - Ensure device meets minimum SDK requirements (API 29+)
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Backend Setup" icon="server" href="/getting-started/backend-setup">
+    Configure API and Socket.IO endpoints
+  </Card>
+  
+  <Card title="Firebase Setup" icon="fire" href="/getting-started/firebase-setup">
+    Enable push notifications with FCM
+  </Card>
+</CardGroup>

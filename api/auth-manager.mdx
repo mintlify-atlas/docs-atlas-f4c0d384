@@ -1,0 +1,300 @@
+---
+title: 'AuthManager'
+description: 'Authentication and user session management'
+icon: 'key'
+---
+
+## Overview
+
+The `AuthManager` class handles all authentication-related operations in Threadly, including login, logout, password reset, and password recovery. It supports multiple login methods (mobile, email, and user ID) and provides secure token-based authentication.
+
+## Constructor
+
+```java
+public AuthManager()
+```
+
+Initializes the AuthManager and sets up SharedPreferences for storing authentication data.
+
+## Methods
+
+### LoginMobile
+
+Authenticates a user using their mobile number and password.
+
+```java
+public void LoginMobile(
+    String mobile,
+    String password,
+    NetworkCallbackInterfaceWithJsonObjectDelivery callback
+)
+```
+
+<ParamField path="mobile" type="String" required>
+  User's mobile number
+</ParamField>
+
+<ParamField path="password" type="String" required>
+  User's password
+</ParamField>
+
+<ParamField path="callback" type="NetworkCallbackInterfaceWithJsonObjectDelivery" required>
+  Callback interface to handle the response
+</ParamField>
+
+<ResponseField name="response" type="JSONObject">
+  Contains authentication token and user details
+</ResponseField>
+
+#### Example
+
+```java
+AuthManager authManager = new AuthManager();
+authManager.LoginMobile("+1234567890", "securePassword123", 
+    new NetworkCallbackInterfaceWithJsonObjectDelivery() {
+        @Override
+        public void onSuccess(JSONObject response) {
+            // Handle successful login
+            String token = response.optString("token");
+        }
+        
+        @Override
+        public void onError(String errorCode) {
+            // Handle error
+        }
+    });
+```
+
+### LoginEmail
+
+Authenticates a user using their email address and password.
+
+```java
+public void LoginEmail(
+    String email,
+    String password,
+    NetworkCallbackInterfaceWithJsonObjectDelivery callback
+)
+```
+
+<ParamField path="email" type="String" required>
+  User's email address
+</ParamField>
+
+<ParamField path="password" type="String" required>
+  User's password
+</ParamField>
+
+<ParamField path="callback" type="NetworkCallbackInterfaceWithJsonObjectDelivery" required>
+  Callback interface to handle the response
+</ParamField>
+
+<ResponseField name="response" type="JSONObject">
+  Contains authentication token and user details
+</ResponseField>
+
+#### Example
+
+```java
+AuthManager authManager = new AuthManager();
+authManager.LoginEmail("user@example.com", "securePassword123", 
+    new NetworkCallbackInterfaceWithJsonObjectDelivery() {
+        @Override
+        public void onSuccess(JSONObject response) {
+            // Handle successful login
+        }
+        
+        @Override
+        public void onError(String errorCode) {
+            // Handle error
+        }
+    });
+```
+
+### LoginUserId
+
+Authenticates a user using their unique user ID and password.
+
+```java
+public void LoginUserId(
+    String userId,
+    String password,
+    NetworkCallbackInterfaceWithJsonObjectDelivery callback
+)
+```
+
+<ParamField path="userId" type="String" required>
+  User's unique identifier
+</ParamField>
+
+<ParamField path="password" type="String" required>
+  User's password
+</ParamField>
+
+<ParamField path="callback" type="NetworkCallbackInterfaceWithJsonObjectDelivery" required>
+  Callback interface to handle the response
+</ParamField>
+
+<ResponseField name="response" type="JSONObject">
+  Contains authentication token and user details
+</ResponseField>
+
+### logout
+
+Logs out the current user and invalidates their session token.
+
+```java
+public void logout(NetworkCallbackInterface callbackInterface)
+```
+
+<ParamField path="callbackInterface" type="NetworkCallbackInterface" required>
+  Callback interface to handle the response
+</ParamField>
+
+#### Example
+
+```java
+AuthManager authManager = new AuthManager();
+authManager.logout(new NetworkCallbackInterface() {
+    @Override
+    public void onSuccess() {
+        // User successfully logged out
+    }
+    
+    @Override
+    public void onError(String err) {
+        // Handle error
+    }
+});
+```
+
+### ForgetPasswordWithMobile
+
+Resets the password for a user who authenticated via mobile number.
+
+```java
+public void ForgetPasswordWithMobile(
+    String password,
+    String token,
+    NetworkCallbackInterface callback
+)
+```
+
+<ParamField path="password" type="String" required>
+  New password to set
+</ParamField>
+
+<ParamField path="token" type="String" required>
+  Reset token received via SMS
+</ParamField>
+
+<ParamField path="callback" type="NetworkCallbackInterface" required>
+  Callback interface to handle the response
+</ParamField>
+
+#### Example
+
+```java
+AuthManager authManager = new AuthManager();
+authManager.ForgetPasswordWithMobile(
+    "newSecurePassword123",
+    "reset-token-from-sms",
+    new NetworkCallbackInterface() {
+        @Override
+        public void onSuccess() {
+            // Password successfully reset
+        }
+        
+        @Override
+        public void onError(String err) {
+            // Handle error
+        }
+    });
+```
+
+### ForgetPasswordWithEmail
+
+Resets the password for a user who authenticated via email.
+
+```java
+public void ForgetPasswordWithEmail(
+    String password,
+    String token,
+    NetworkCallbackInterface callback
+)
+```
+
+<ParamField path="password" type="String" required>
+  New password to set
+</ParamField>
+
+<ParamField path="token" type="String" required>
+  Reset token received via email
+</ParamField>
+
+<ParamField path="callback" type="NetworkCallbackInterface" required>
+  Callback interface to handle the response
+</ParamField>
+
+### ResetPassword
+
+Changes the password for the currently logged-in user.
+
+```java
+public void ResetPassword(
+    String oldPassword,
+    String newPassword,
+    NetworkCallbackInterfaceJsonObject callback
+) throws JSONException
+```
+
+<ParamField path="oldPassword" type="String" required>
+  User's current password
+</ParamField>
+
+<ParamField path="newPassword" type="String" required>
+  New password to set
+</ParamField>
+
+<ParamField path="callback" type="NetworkCallbackInterfaceJsonObject" required>
+  Callback interface to handle the response
+</ParamField>
+
+#### Example
+
+```java
+AuthManager authManager = new AuthManager();
+try {
+    authManager.ResetPassword(
+        "currentPassword123",
+        "newStrongPassword456",
+        new NetworkCallbackInterfaceJsonObject() {
+            @Override
+            public void onSuccess(JSONObject response) {
+                // Password successfully changed
+            }
+            
+            @Override
+            public void onError(int errorCode) {
+                // Handle error
+            }
+        });
+} catch (JSONException e) {
+    // Handle exception
+}
+```
+
+## API Endpoints Used
+
+- `POST /api/auth/login/mobile` - Mobile login
+- `POST /api/auth/login/email` - Email login
+- `POST /api/auth/login/userid` - User ID login
+- `GET /api/auth/logout` - User logout
+- `POST /api/auth/forget-password/mobile` - Mobile password reset
+- `POST /api/auth/forget-password/email` - Email password reset
+- `POST /api/auth/reset-password` - Change password
+
+## Related Components
+
+- [ProfileManager](/api/profile-manager) - User profile management
+- See AuthManager.java:18 for implementation details

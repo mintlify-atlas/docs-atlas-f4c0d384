@@ -1,0 +1,258 @@
+---
+title: 'ConnectivityUtil'
+description: 'Network connectivity utilities for checking internet connection status'
+icon: 'wifi'
+---
+
+## Overview
+
+The `ConnectivityUtil` class provides utilities for checking network connectivity and internet availability in Android applications.
+
+## Methods
+
+### IsInternetConnected
+
+Checks if the device has an active internet connection.
+
+```java
+boolean isConnected = ConnectivityUtil.IsInternetConnected(context);
+```
+
+<ParamField path="context" type="Context" required>
+  The Android application context
+</ParamField>
+
+**Returns:** `boolean` - `true` if internet is available, `false` otherwise
+
+## How It Works
+
+The method checks for:
+1. **Active Network:** Verifies that a network connection exists
+2. **Internet Capability:** Confirms the network has internet capability (`NET_CAPABILITY_INTERNET`)
+3. **Validated Connection:** Ensures the connection is validated and functional (`NET_CAPABILITY_VALIDATED`)
+
+## Usage Examples
+
+### Basic Connectivity Check
+
+```java
+if (ConnectivityUtil.IsInternetConnected(context)) {
+    // Proceed with network operations
+    fetchDataFromServer();
+} else {
+    // Show offline message
+    Toast.makeText(context, "No internet connection", Toast.LENGTH_SHORT).show();
+}
+```
+
+### Before Making API Calls
+
+```java
+public void loadUserData() {
+    if (!ConnectivityUtil.IsInternetConnected(this)) {
+        showErrorDialog("Please check your internet connection");
+        return;
+    }
+    
+    // Make API call
+    apiService.getUserProfile()
+        .enqueue(new Callback<User>() {
+            @Override
+            public void onResponse(Call<User> call, Response<User> response) {
+                // Handle response
+            }
+
+            @Override
+            public void onFailure(Call<User> call, Throwable t) {
+                // Handle error
+            }
+        });
+}
+```
+
+### In a Fragment
+
+```java
+public class FeedFragment extends Fragment {
+    
+    @Override
+    public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
+        super.onViewCreated(view, savedInstanceState);
+        
+        if (ConnectivityUtil.IsInternetConnected(requireContext())) {
+            loadFeed();
+        } else {
+            showOfflineState();
+        }
+    }
+    
+    private void showOfflineState() {
+        // Show offline UI
+        offlineView.setVisibility(View.VISIBLE);
+        feedRecyclerView.setVisibility(View.GONE);
+    }
+}
+```
+
+### With Network Callback
+
+```java
+public class MainActivity extends AppCompatActivity {
+    private ConnectivityManager connectivityManager;
+    private ConnectivityManager.NetworkCallback networkCallback;
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_main);
+        
+        connectivityManager = (ConnectivityManager) 
+            getSystemService(Context.CONNECTIVITY_SERVICE);
+        
+        networkCallback = new ConnectivityManager.NetworkCallback() {
+            @Override
+            public void onAvailable(@NonNull Network network) {
+                runOnUiThread(() -> {
+                    if (ConnectivityUtil.IsInternetConnected(MainActivity.this)) {
+                        updateUIForOnline();
+                    }
+                });
+            }
+
+            @Override
+            public void onLost(@NonNull Network network) {
+                runOnUiThread(() -> {
+                    if (!ConnectivityUtil.IsInternetConnected(MainActivity.this)) {
+                        updateUIForOffline();
+                    }
+                });
+            }
+        };
+        
+        connectivityManager.registerDefaultNetworkCallback(networkCallback);
+    }
+    
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        if (connectivityManager != null && networkCallback != null) {
+            connectivityManager.unregisterNetworkCallback(networkCallback);
+        }
+    }
+}
+```
+
+### Before Uploading Files
+
+```java
+public void uploadImage(File imageFile) {
+    if (!ConnectivityUtil.IsInternetConnected(this)) {
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setTitle("No Internet Connection")
+               .setMessage("Please connect to the internet to upload images.")
+               .setPositiveButton("OK", null)
+               .show();
+        return;
+    }
+    
+    // Proceed with upload
+    RequestBody requestFile = RequestBody.create(
+        MediaType.parse("image/*"), 
+        imageFile
+    );
+    MultipartBody.Part body = MultipartBody.Part.createFormData(
+        "image", 
+        imageFile.getName(), 
+        requestFile
+    );
+    
+    apiService.uploadImage(body).enqueue(uploadCallback);
+}
+```
+
+### In a ViewModel with LiveData
+
+```java
+public class PostViewModel extends ViewModel {
+    private MutableLiveData<Boolean> isConnected = new MutableLiveData<>();
+    private Context context;
+    
+    public PostViewModel(Application application) {
+        this.context = application.getApplicationContext();
+        checkConnectivity();
+    }
+    
+    public void checkConnectivity() {
+        boolean connected = ConnectivityUtil.IsInternetConnected(context);
+        isConnected.postValue(connected);
+    }
+    
+    public LiveData<Boolean> getConnectivityStatus() {
+        return isConnected;
+    }
+    
+    public void createPost(Post post) {
+        if (Boolean.TRUE.equals(isConnected.getValue())) {
+            // Create post
+        } else {
+            // Show error
+        }
+    }
+}
+```
+
+## Implementation Details
+
+The method uses Android's `ConnectivityManager` to check:
+
+```java
+ConnectivityManager connectivityManager = 
+    (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
+Network network = connectivityManager.getActiveNetwork();
+```
+
+It verifies two key capabilities:
+- `NET_CAPABILITY_INTERNET`: The network can reach the internet
+- `NET_CAPABILITY_VALIDATED`: The internet connection is validated and working
+
+## Required Permissions
+
+Add this permission to your `AndroidManifest.xml`:
+
+```xml
+<uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Check Before Network Operations">
+    Always verify connectivity before making network requests to provide better user experience and avoid unnecessary errors.
+  </Accordion>
+  
+  <Accordion title="Don't Block UI Thread">
+    While this method is fast, consider calling it off the main thread for critical paths:
+    
+    ```java
+    Executors.newSingleThreadExecutor().execute(() -> {
+        boolean isConnected = ConnectivityUtil.IsInternetConnected(context);
+        runOnUiThread(() -> updateUI(isConnected));
+    });
+    ```
+  </Accordion>
+  
+  <Accordion title="Monitor Changes">
+    Use `NetworkCallback` to monitor real-time connectivity changes rather than polling this method repeatedly.
+  </Accordion>
+  
+  <Accordion title="Handle Edge Cases">
+    A validated connection doesn't guarantee your specific server is reachable. Implement proper error handling for API calls.
+  </Accordion>
+</AccordionGroup>
+
+## Notes
+
+- This method requires Android API level 23 (Marshmallow) or higher for full functionality
+- The method returns `false` if no network is available
+- Validated capability ensures the connection has been verified by the system
+- This is more reliable than simply checking if WiFi or mobile data is enabled

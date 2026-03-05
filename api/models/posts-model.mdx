@@ -1,0 +1,121 @@
+---
+title: 'Posts Model'
+description: 'Data model representing a post in Threadly'
+---
+
+## Overview
+
+The `Posts_Model` class represents a post in the Threadly application. It contains information about the post content, engagement metrics, and the user who created it.
+
+## Fields
+
+<ResponseField name="CONTENT_TYPE" type="int" required>
+  Content type indicator:
+  - `0`: Regular content post
+  - `1`: Suggested post
+</ResponseField>
+
+<ResponseField name="postId" type="int" required>
+  Unique identifier for the post
+</ResponseField>
+
+<ResponseField name="userId" type="string" required>
+  ID of the user who created the post
+</ResponseField>
+
+<ResponseField name="username" type="string" required>
+  Username of the post creator
+</ResponseField>
+
+<ResponseField name="userDpUrl" type="string" required>
+  URL to the user's display picture/profile photo
+</ResponseField>
+
+<ResponseField name="postUrl" type="string" required>
+  URL to the post media content
+</ResponseField>
+
+<ResponseField name="caption" type="string" required>
+  Caption text for the post
+</ResponseField>
+
+<ResponseField name="createdAt" type="string" required>
+  Timestamp when the post was created
+</ResponseField>
+
+<ResponseField name="likedBy" type="string">
+  Username of a user who liked the post (used for displaying "Liked by...")
+</ResponseField>
+
+<ResponseField name="likeCount" type="int" required>
+  Total number of likes on the post
+</ResponseField>
+
+<ResponseField name="commentCount" type="int" required>
+  Total number of comments on the post
+</ResponseField>
+
+<ResponseField name="shareCount" type="int" required>
+  Total number of shares for the post
+</ResponseField>
+
+<ResponseField name="isliked" type="boolean" required>
+  Whether the current user has liked this post
+</ResponseField>
+
+<ResponseField name="isVideo" type="boolean" required>
+  Whether the post content is a video (`true`) or image (`false`)
+</ResponseField>
+
+<ResponseField name="isFollowed" type="boolean" required>
+  Whether the current user follows the post creator
+</ResponseField>
+
+## Methods
+
+The model provides standard getter and setter methods for all fields:
+
+- `getCONTENT_TYPE()` / `setCONTENT_TYPE(int)`
+- `getPostId()` / `setPostId(int)`
+- `getUserId()` / `setUserId(String)`
+- `getUsername()` / `setUsername(String)`
+- `getUserDpUrl()` / `setUserDpUrl(String)`
+- `getPostUrl()` / `setPostUrl(String)`
+- `getCaption()` / `setCaption(String)`
+- `getCreatedAt()` / `setCreatedAt(String)`
+- `getLikedBy()` / `setLikedBy(String)`
+- `getLikeCount()` / `setLikeCount(int)`
+- `getCommentCount()` / `setCommentCount(int)`
+- `getShareCount()` / `setShareCount(int)`
+- `getIsliked()` / `setIsliked(Boolean)`
+- `isVideo()` / `setVideo(boolean)`
+- `isFollowed()` / `setFollowed(boolean)`
+
+## Example
+
+```json
+{
+  "CONTENT_TYPE": 0,
+  "postId": 12345,
+  "userId": "user_789",
+  "username": "johndoe",
+  "userDpUrl": "https://example.com/profiles/johndoe.jpg",
+  "postUrl": "https://example.com/posts/12345.jpg",
+  "caption": "Beautiful sunset at the beach!",
+  "createdAt": "2024-03-15T18:30:00Z",
+  "likedBy": "janedoe",
+  "likeCount": 142,
+  "commentCount": 23,
+  "shareCount": 8,
+  "isliked": true,
+  "isVideo": false,
+  "isFollowed": true
+}
+```
+
+## Usage Notes
+
+- The `CONTENT_TYPE` field distinguishes between regular content (0) and suggested/recommended posts (1)
+- The `isliked` field is derived from an integer value during construction (>0 = true)
+- Both image and video posts use the same model, differentiated by the `isVideo` flag
+- Engagement metrics (`likeCount`, `commentCount`, `shareCount`) are updated as users interact with the post

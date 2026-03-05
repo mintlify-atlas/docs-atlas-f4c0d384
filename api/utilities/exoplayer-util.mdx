@@ -1,0 +1,321 @@
+---
+title: 'ExoPlayerUtil'
+description: 'Video playback utilities using ExoPlayer for media streaming and caching'
+icon: 'play'
+---
+
+## Overview
+
+The `ExoPlayerUtil` class provides utilities for managing video playback using ExoPlayer with built-in caching support. It handles player initialization, media playback control, and resource management.
+
+## Initialization
+
+### init
+
+Initializes the ExoPlayer instance with the application context.
+
+```java
+ExoPlayerUtil.init(context);
+```
+
+<ParamField path="context" type="Context" required>
+  The Android application context
+</ParamField>
+
+### getExoplayer
+
+Returns the singleton ExoPlayer instance.
+
+```java
+ExoPlayer player = ExoPlayerUtil.getExoplayer();
+```
+
+**Returns:** `ExoPlayer` - The initialized ExoPlayer instance
+
+## Playback Methods
+
+### play
+
+Plays a video from a URI with caching support.
+
+```java
+ExoPlayerUtil.play(videoUri, playerView);
+```
+
+<ParamField path="uri" type="Uri" required>
+  The URI of the video to play
+</ParamField>
+
+<ParamField path="playerView" type="PlayerView" required>
+  The PlayerView to attach the player to
+</ParamField>
+
+**Example:**
+```java
+Uri videoUri = Uri.parse("https://example.com/video.mp4");
+PlayerView playerView = findViewById(R.id.player_view);
+ExoPlayerUtil.play(videoUri, playerView);
+```
+
+### play (with preview)
+
+Plays a video with an optional preview ImageView.
+
+```java
+ExoPlayerUtil.play(videoUri, playerView, previewImageView);
+```
+
+<ParamField path="uri" type="Uri" required>
+  The URI of the video to play
+</ParamField>
+
+<ParamField path="playerView" type="PlayerView" required>
+  The PlayerView to attach the player to
+</ParamField>
+
+<ParamField path="previewImageView" type="ImageView" required>
+  The ImageView for displaying a preview thumbnail
+</ParamField>
+
+### play (from File)
+
+Plays a video from a local file.
+
+```java
+File videoFile = new File("/path/to/video.mp4");
+ExoPlayerUtil.play(videoFile, playerView);
+```
+
+<ParamField path="file" type="File" required>
+  The video file to play
+</ParamField>
+
+<ParamField path="playerView" type="PlayerView" required>
+  The PlayerView to attach the player to
+</ParamField>
+
+### playFromLocalUri
+
+Plays a video from a local URI without caching.
+
+```java
+ExoPlayerUtil.playFromLocalUri(localUri, playerView);
+```
+
+<ParamField path="uri" type="Uri" required>
+  The local URI of the video to play
+</ParamField>
+
+<ParamField path="playerView" type="PlayerView" required>
+  The PlayerView to attach the player to
+</ParamField>
+
+### playNoLoop
+
+Plays a video without looping.
+
+```java
+ExoPlayerUtil.playNoLoop(videoUri, playerView);
+```
+
+<ParamField path="uri" type="Uri" required>
+  The URI of the video to play
+</ParamField>
+
+<ParamField path="playerView" type="PlayerView" required>
+  The PlayerView to attach the player to
+</ParamField>
+
+**Note:** By default, the player is set to `REPEAT_MODE_ONE`. This method sets it to `REPEAT_MODE_OFF`.
+
+## Playback Control
+
+### pause
+
+Pauses the current playback.
+
+```java
+ExoPlayerUtil.pause();
+```
+
+### resume
+
+Resumes the paused playback.
+
+```java
+ExoPlayerUtil.resume();
+```
+
+### stop
+
+Stops the current playback.
+
+```java
+ExoPlayerUtil.stop();
+```
+
+### seekTo
+
+Seeks to a specific position in the video.
+
+```java
+ExoPlayerUtil.seekTo(30000); // Seek to 30 seconds
+```
+
+<ParamField path="position" type="long" required>
+  The position to seek to in milliseconds
+</ParamField>
+
+## Audio Control
+
+### mute
+
+Mutes the audio.
+
+```java
+ExoPlayerUtil.mute();
+```
+
+### unMute
+
+Unmutes the audio.
+
+```java
+ExoPlayerUtil.unMute();
+```
+
+## Playback Information
+
+### getPlayingInfo
+
+Returns information about the current playback.
+
+```java
+long[] info = ExoPlayerUtil.getPlayingInfo();
+long duration = info[0];
+long currentPosition = info[1];
+```
+
+**Returns:** `long[]` - Array with `[duration, currentPosition]` in milliseconds
+
+**Example:**
+```java
+long[] info = ExoPlayerUtil.getPlayingInfo();
+long duration = info[0];
+long currentPosition = info[1];
+int progress = (int) ((currentPosition * 100) / duration);
+```
+
+## Caching & Optimization
+
+### preloadReel
+
+Preloads a video for smooth playback later.
+
+```java
+ExoPlayerUtil.preloadReel(videoUri);
+```
+
+<ParamField path="uri" type="Uri" required>
+  The URI of the video to preload
+</ParamField>
+
+**Example:**
+```java
+// Preload the next video in a feed
+Uri nextVideoUri = Uri.parse("https://example.com/next-video.mp4");
+ExoPlayerUtil.preloadReel(nextVideoUri);
+```
+
+## Resource Management
+
+### release
+
+Releases the ExoPlayer instance and frees resources.
+
+```java
+ExoPlayerUtil.release();
+```
+
+**Important:** Call this method in your Activity's `onDestroy()` to prevent memory leaks.
+
+**Example:**
+```java
+@Override
+protected void onDestroy() {
+    super.onDestroy();
+    ExoPlayerUtil.release();
+}
+```
+
+## ExoPlayerCache
+
+The `ExoPlayerCache` class manages video caching for offline playback and improved performance.
+
+### getInstance
+
+Returns the singleton cache instance.
+
+```java
+SimpleCache cache = ExoPlayerCache.getInstance(context);
+```
+
+<ParamField path="context" type="Context" required>
+  The Android application context
+</ParamField>
+
+**Returns:** `SimpleCache` - A SimpleCache instance with 1000 MB capacity
+
+**Cache Configuration:**
+- Cache directory: `app_cache/exo_media_cache`
+- Cache size: 1000 MB
+- Eviction policy: Least Recently Used (LRU)
+
+## Complete Example
+
+```java
+public class VideoPlayerActivity extends AppCompatActivity {
+    private PlayerView playerView;
+    private Uri videoUri;
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_video_player);
+
+        playerView = findViewById(R.id.player_view);
+        videoUri = Uri.parse("https://example.com/video.mp4");
+
+        // Initialize the player
+        ExoPlayerUtil.init(this);
+
+        // Start playback
+        ExoPlayerUtil.play(videoUri, playerView);
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        ExoPlayerUtil.pause();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        ExoPlayerUtil.resume();
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        ExoPlayerUtil.release();
+    }
+}
+```
+
+## Notes
+
+- The player is initialized with `REPEAT_MODE_ONE` by default
+- All network playback methods use caching through `CacheDataSourceUtil`
+- The player automatically detaches from previous PlayerViews when playing new content
+- Methods marked with `@UnstableApi` require the AndroidX Media3 library

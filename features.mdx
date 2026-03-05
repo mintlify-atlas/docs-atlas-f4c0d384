@@ -1,0 +1,360 @@
+---
+title: Features
+description: Comprehensive overview of all features available in Threadly - from authentication to real-time messaging
+---
+
+# Threadly Features
+
+Threadly is packed with modern social media features built natively for Android. Explore everything this platform has to offer.
+
+## Core Features
+
+<CardGroup cols={3}>
+  <Card title="Authentication" icon="lock" href="/features/authentication">
+    Secure login and signup with email/mobile OTP verification
+  </Card>
+  <Card title="Social Feed" icon="newspaper" href="/features/social-feed">
+    Dynamic home feed with images, videos, and stories
+  </Card>
+  <Card title="Reels" icon="video" href="/features/reels">
+    TikTok-style scrollable video feed with smooth ExoPlayer playback
+  </Card>
+  <Card title="Messaging" icon="comments" href="/features/messaging">
+    Real-time 1-on-1 chat powered by Socket.IO with FCM fallback
+  </Card>
+  <Card title="Stories" icon="circle" href="/features/stories">
+    24-hour ephemeral content that disappears automatically
+  </Card>
+  <Card title="Media Creation" icon="camera" href="/features/media-creation">
+    Custom camera implementation using CameraX for photos and videos
+  </Card>
+</CardGroup>
+
+## Authentication & Security
+
+The authentication system provides multiple login methods with secure OTP verification:
+
+- **Email & Mobile Login** - Sign in using email address or mobile number
+- **OTP Verification** - Two-factor authentication for enhanced security
+- **Password Management** - Secure password creation and reset functionality
+- **Session Management** - Persistent login with token-based authentication
+- **JWT Authentication** - Secure API communication with bearer tokens
+
+```java
+// Example: Login implementation
+authManager.LoginEmail(userid, password, new NetworkCallbackInterfaceWithJsonObjectDelivery() {
+    @Override
+    public void onSuccess(JSONObject response) {
+        String username = response.getString("username");
+        // Handle successful login
+    }
+});
+```
+*From: `LoginActivity.java:75-80`*
+
+<Note>
+  All authentication flows include proper error handling and user feedback via toast messages and loading indicators.
+</Note>
+
+## Social Features
+
+### Dynamic Feed
+
+The home feed displays a mix of content types:
+
+- **Image Posts** - Single or multiple images per post
+- **Video Posts** - Short-form videos with ExoPlayer
+- **Stories Section** - Horizontal scrollable stories at the top
+- **Suggested Users** - Discover new people to follow
+- **Pull to Refresh** - Update feed with latest content
+- **Infinite Scroll** - Paginated loading for smooth performance
+
+**ViewModels**: `ImagePostsFeedViewModel`, `VideoPostsFeedViewModel`, `StoriesViewModel`
+
+### User Profiles
+
+Comprehensive profile system:
+
+- Profile pictures and cover images
+- Bio and username display
+- Post grid with image/video thumbnails
+- Follower and following counts
+- Follow/unfollow functionality
+- Private account support
+
+**Managers**: `ProfileManager`, `ProfileEditorManager`, `FollowManager`
+
+### Search & Discovery
+
+Find users and content:
+
+- **User Search** - Search by name or username
+- **Suggested Users** - Algorithm-based recommendations
+- **Explore Page** - Discover trending content
+
+**ViewModels**: `SearchViewModel`, `SuggestUsersViewModel`
+
+## Content Creation & Sharing
+
+### Posts
+
+Create and share multimedia content:
+
+- **Image Posts** - Upload single or multiple images
+- **Video Posts** - Share video content
+- **Captions** - Add text descriptions
+- **Privacy Settings** - Public or private posts
+
+**Activities**: `AddPostActivity`, `PostActivity`  
+**Workers**: `UploadMediaWorker` for background upload
+
+### Stories
+
+24-hour ephemeral content:
+
+- **Image Stories** - Quick photo shares
+- **Video Stories** - Short video clips
+- **Auto-delete** - Content expires after 24 hours
+- **Story Viewer** - ViewPager-based story viewing
+- **View Count** - See who viewed your story
+
+**Activities**: `AddStoryActivity`  
+**Workers**: `UploadStoriesWorker`
+
+### Reels
+
+TikTok-style short videos:
+
+- **Vertical Scrolling** - Swipe up for next video
+- **Auto-play** - Videos start automatically
+- **Preloading** - Next videos cache for smooth experience
+- **Interactions** - Like, comment, share, follow
+- **Mute Toggle** - Audio on/off control
+
+**Adapters**: `ReelsAdapter`  
+**Utils**: `ExoplayerUtil`, `ExoPlayerCache`
+
+### Custom Camera
+
+Built with CameraX:
+
+- **Photo Capture** - High-quality image capture
+- **Video Recording** - Record video clips
+- **Camera Flip** - Switch front/back camera
+- **Flash Control** - Toggle flash on/off
+- **Gallery Access** - Select existing media
+
+**Libraries**: CameraX (1.4.0)
+
+## Real-time Messaging
+
+Socket.IO-powered instant messaging:
+
+- **1-on-1 Chat** - Direct messaging between users
+- **Message History** - Persistent chat history in Room Database
+- **Offline Support** - Send messages offline, sync when online
+- **Media Messages** - Send images and videos in chat
+- **Read Receipts** - See when messages are read
+- **Typing Indicators** - Real-time typing status
+- **Message Deletion** - Delete for me or unsend for everyone
+- **FCM Fallback** - Push notifications when Socket.IO is disconnected
+
+**Implementation**:
+- `SocketManager.java` - Socket.IO connection management
+- `MessageManager.java` - Message operations
+- `MessageAdapter` - Chat UI rendering
+- `MessagesViewModel` - Message state management
+
+```java
+// Example: Sending a message via Socket.IO
+SocketEmitterEvents.SendMessage(messageId, receiverId, messageText, (args) -> {
+    // Message sent successfully
+});
+```
+*From: `SocketEmitterEvents.java:45`*
+
+## Media & Playback
+
+### ExoPlayer Integration
+
+Smooth video playback:
+
+- **Video Caching** - Cache videos for offline viewing
+- **Preloading** - Load next videos in advance
+- **Memory Management** - Efficient resource usage
+- **Playback Controls** - Play, pause, seek, volume
+
+**Utils**: `ExoplayerUtil`, `ExoPlayerCache`, `CacheDataSourceUtil`
+
+### Image Loading
+
+Fast image rendering:
+
+- **Glide** - Primary image loader with caching
+- **Coil** - Modern image loading with Kotlin coroutines
+- **Shimmer Effects** - Loading placeholders
+- **Progressive Loading** - Low to high quality
+
+## Interactions
+
+### Likes
+
+- Like/unlike posts
+- Like count display
+- Real-time like updates
+
+**Manager**: `LikeManager`
+
+### Comments
+
+- Comment on posts
+- Reply to comments
+- Comment count display
+- Comment moderation
+
+**Manager**: `CommentsManager`  
+**ViewModels**: `CommentsViewModel`  
+**Utils**: `PostCommentsViewerUtil`
+
+### Shares
+
+- Share posts to other platforms
+- Internal post sharing (coming soon)
+
+**Utils**: `PostShareHelperUtil`
+
+### Notifications
+
+- **Interaction Notifications** - Likes, comments, new followers
+- **Message Notifications** - New message alerts
+- **FCM Integration** - Push notifications when app is closed
+- **Notification Badges** - Unread count indicators
+
+**Services**: `FcmService`  
+**ViewModels**: `InteractionNotificationViewModel`
+
+## Data & Offline Support
+
+### Room Database
+
+Local data persistence:
+
+- **Message Schema** - Chat history storage
+- **History Schema** - Conversation list
+- **Notification Schema** - Notification history
+- **DAO Operations** - CRUD operations with SQL
+- **LiveData Integration** - Reactive UI updates
+
+**Database**: `DataBase.java` (singleton)  
+**Entities**: `MessageSchema`, `HistorySchema`, `NotificationSchema`  
+**DAO**: `operator.java`
+
+```java
+// Example: Room Database singleton
+public static DataBase getInstance(Context context) {
+    if (dataBase == null) {
+        synchronized (DataBase.class) {
+            if (dataBase == null) {
+                dataBase = Room.databaseBuilder(context, DataBase.class, "database")
+                    .allowMainThreadQueries()
+                    .fallbackToDestructiveMigration()
+                    .build();
+            }
+        }
+    }
+    return dataBase;
+}
+```
+*From: `RoomDb/DataBase.java:18-29`*
+
+### Background Sync
+
+- **WorkManager** - Reliable background task execution
+- **Upload Workers** - Media upload in background
+- **Message Sync** - Pending message delivery
+- **Retry Logic** - Automatic retry on failure
+
+**Workers**: `UploadMediaWorker`, `UploadStoriesWorker`, `MessageMediaHandlerWorker`
+
+## Push Notifications
+
+Firebase Cloud Messaging integration:
+
+- **FCM Token Management** - Device token registration
+- **Message Notifications** - New message push
+- **Interaction Alerts** - Likes, comments, follows
+- **Background Delivery** - Notifications when app is closed
+- **Custom Actions** - Open specific screens from notifications
+
+**Service**: `FcmService`  
+**Manager**: `FcmManager`
+
+## Privacy & Settings
+
+User control and privacy:
+
+- **Privacy Settings** - Public/private account toggle
+- **Password Change** - Update password securely
+- **Account Management** - Edit profile information
+- **Notification Settings** - Configure notification preferences
+- **Logout** - Secure session termination
+
+**Activities**: `SettingsActivity`, `PasswordChangeActivity`  
+**Manager**: `PrivacyManager`
+
+## Technical Features
+
+### MVVM Architecture
+
+Clean architecture with proper separation:
+
+- **ViewModels** - Business logic and state management
+- **LiveData** - Reactive data observation
+- **Repository Pattern** - Data abstraction layer
+- **Dependency Injection** - Manual DI via Core singleton
+
+12+ ViewModels: `ProfileViewModel`, `MessagesViewModel`, `ImagePostsFeedViewModel`, and more
+
+### ViewBinding
+
+Type-safe view access:
+
+```gradle
+buildFeatures {
+    viewBinding true
+}
+```
+
+All activities and fragments use ViewBinding for null-safe view references.
+
+### Lifecycle-Aware Components
+
+Proper lifecycle management:
+
+- Fragment lifecycle handling
+- Activity result contracts
+- Permission requests via ActivityCompat
+- Proper resource cleanup (ExoPlayer, Socket.IO)
+
+## Development Tools
+
+- **Shimmer Effects** - Loading placeholders with Facebook Shimmer
+- **SwipeRefreshLayout** - Pull-to-refresh functionality
+- **Fast Android Networking** - HTTP client (v1.0.4)
+- **Socket.IO Client** - Real-time communication (v2.0.0)
+- **Logging** - Custom LoggerUtil for debugging
+
+---
+
+## Get Started
+
+Ready to explore these features in action?
+
+<CardGroup cols={2}>
+  <Card title="Installation Guide" icon="rocket" href="/getting-started/installation">
+    Set up Threadly on your local machine
+  </Card>
+  <Card title="Architecture Overview" icon="sitemap" href="/architecture/overview">
+    Understand how Threadly is built
+  </Card>
+</CardGroup>

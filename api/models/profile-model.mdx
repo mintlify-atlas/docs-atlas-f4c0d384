@@ -1,0 +1,122 @@
+---
+title: 'Profile Model'
+description: 'Data model representing a user profile in Threadly'
+---
+
+## Overview
+
+The `Profile_Model` class represents a user profile in the Threadly application. It contains user information, statistics, and relationship status with other users.
+
+## Fields
+
+<ResponseField name="userid" type="string" required>
+  Unique identifier for the user
+</ResponseField>
+
+<ResponseField name="username" type="string" required>
+  The user's username/display name
+</ResponseField>
+
+<ResponseField name="profilepic" type="string" required>
+  URL to the user's profile picture
+</ResponseField>
+
+<ResponseField name="bio" type="string">
+  User's biography/about text
+</ResponseField>
+
+<ResponseField name="dob" type="string">
+  Date of birth of the user
+</ResponseField>
+
+<ResponseField name="followers" type="int" required>
+  Number of followers the user has
+</ResponseField>
+
+<ResponseField name="following" type="int" required>
+  Number of accounts the user is following
+</ResponseField>
+
+<ResponseField name="posts" type="int" required>
+  Total number of posts created by the user
+</ResponseField>
+
+<ResponseField name="isFollowingMe" type="boolean" required>
+  Whether this user follows the current user
+</ResponseField>
+
+<ResponseField name="isFollowedByMe" type="boolean" required>
+  Whether the current user follows this user
+</ResponseField>
+
+<ResponseField name="isPrivate" type="boolean">
+  Whether the user's profile is private (requires follow approval)
+</ResponseField>
+
+<ResponseField name="isFollowRequestApproved" type="boolean">
+  Whether a follow request to this user has been approved
+</ResponseField>
+
+## Methods
+
+The model provides standard getter and setter methods for all fields:
+
+- `getUserid()` / `setUserid(String)`
+- `getUsername()` / `setUsername(String)`
+- `getProfilepic()` / `setProfilepic(String)`
+- `getBio()` / `setBio(String)`
+- `getDob()` / `setDob(String)`
+- `getFollowers()` / `setFollowers(int)`
+- `getFollowing()` / `setFollowing(int)`
+- `getPosts()` / `setPosts(int)`
+- `isFollowingMe()` / `setFollowingMe(boolean)`
+- `isFollowedByMe()` / `setFollowedByMe(boolean)`
+- `isPrivate()` / `setPrivate(boolean)`
+- `isFollowRequestApproved()` / `setFollowRequestApproved(boolean)`
+
+## Constructors
+
+The model has two constructors:
+
+### Basic Constructor
+Accepts basic profile information and follow status:
+```java
+Profile_Model(String userid, String username, String profilepic, 
+              String bio, String dob, int followers, int following, 
+              int posts, int isFollowedByMe, int isFollowingMe)
+```
+
+### Extended Constructor
+Includes privacy settings:
+```java
+Profile_Model(String userid, String username, String profilepic, 
+              String bio, String dob, int followers, int following, 
+              int posts, int isFollowedByMe, int isFollowingMe,
+              boolean isPrivate, boolean isFollowRequestApproved)
+```
+
+## Example
+
+```json
+{
+  "userid": "user_456",
+  "username": "janedoe",
+  "profilepic": "https://example.com/profiles/janedoe.jpg",
+  "bio": "Photography enthusiast | Travel lover",
+  "dob": "1995-06-15",
+  "followers": 1234,
+  "following": 567,
+  "posts": 89,
+  "isFollowingMe": true,
+  "isFollowedByMe": true,
+  "isPrivate": false,
+  "isFollowRequestApproved": true
+}
+```
+
+## Usage Notes
+
+- The `isFollowedByMe` and `isFollowingMe` fields are derived from integer values during construction (>0 = true)
+- The `isPrivate` field determines whether the user's content requires follow approval to view
+- The `isFollowRequestApproved` field is only relevant when `isPrivate` is true and indicates whether a pending follow request has been approved
+- Profile statistics (`followers`, `following`, `posts`) are updated as the user's activity changes

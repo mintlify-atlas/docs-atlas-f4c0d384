@@ -1,0 +1,311 @@
+---
+title: 'Authentication'
+description: 'User authentication system with email, mobile, and OTP verification'
+---
+
+## Overview
+
+Threadly implements a comprehensive authentication system supporting multiple login methods:
+- Email-based login and registration
+- Mobile number-based login and registration
+- Username-based login
+- OTP verification for secure account creation
+- Password reset functionality
+
+## Authentication Manager
+
+The `AuthManager` class handles all authentication operations:
+
+```java com/rtech/threadly/network_managers/AuthManager.java
+public class AuthManager {
+    SharedPreferences loginInfo;
+    
+    public AuthManager(){
+        loginInfo = Core.getPreference();
+    }
+    
+    // Login methods for different credential types
+    public void LoginEmail(String email, String password, 
+                          NetworkCallbackInterfaceWithJsonObjectDelivery callback)
+    
+    public void LoginMobile(String mobile, String password, 
+                           NetworkCallbackInterfaceWithJsonObjectDelivery callback)
+    
+    public void LoginUserId(String userid, String password, 
+                           NetworkCallbackInterfaceWithJsonObjectDelivery callback)
+}
+```
+
+## Login Flow
+
+### Multi-Method Login
+
+The `LoginActivity` supports three login methods with automatic detection:
+
+```java activities/authActivities/loginActivities/LoginActivity.java
+String userid = userid_field.getText().toString().trim();
+String password = password_filed.getText().toString().trim();
+
+if(ReUsableFunctions.isEmail(userid)){
+    // Email login
+    authManager.LoginEmail(userid, password, new NetworkCallbackInterfaceWithJsonObjectDelivery() {
+        @Override
+        public void onSuccess(JSONObject response) {
+            // Extract user data from response
+            String username = response.getString("username");
+            String uuid = response.getString("uuid");
+            String token = response.getString("token");
+            
+            // Save to SharedPreferences
+            preferenceEditor.putString(SharedPreferencesKeys.UUID, uuid);
+            preferenceEditor.putString(SharedPreferencesKeys.JWT_TOKEN, token);
+            preferenceEditor.putBoolean(SharedPreferencesKeys.IS_LOGGED_IN, true);
+            preferenceEditor.apply();
+            
+            // Navigate to home
+            Intent homePage = new Intent(LoginActivity.this, HomeActivity.class);
+            homePage.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+            startActivity(homePage);
+        }
+    });
+}
+else if (ReUsableFunctions.isPhone(userid)) {
+    // Mobile login
+    authManager.LoginMobile(userid, password, callback);
+}
+else {
+    // Username login
+    authManager.LoginUserId(userid, password, callback);
+}
+```
+
+<Note>
+The app automatically detects the credential type (email, phone, or username) and calls the appropriate login method.
+</Note>
+
+## Registration Flow
+
+### Email Registration
+
+The registration process involves multiple steps:
+
+1. **Email Entry** (`SignUpEmailActivity`)
+2. **OTP Verification** (`VerifyEmailOtpActivity`)
+3. **Password Creation** (`CreatePasswordActivity`)
+4. **Profile Setup** (Name, DOB, etc.)
+
+#### Step 1: Email Validation and OTP Request
+
+```java activities/authActivities/registerActivities/SignUpEmailActivity.java
+String email = email_edittext.getText().toString();
+boolean isValidEmail = ReUsableFunctions.isEmail(email);
+
+if(!isValidEmail){
+    msg_textView.setTextColor(Color.parseColor("#D00707"));
+    msg_textView.setText("Please enter a valid email");
+} else {
+    otpManager.SendOtpEmail(email, new NetworkCallbackInterface() {
+        @Override
+        public void onSuccess() {
+            // Navigate to OTP verification screen
+            Intent intent = new Intent(SignUpEmailActivity.this, 
+                                      VerifyEmailOtpActivity.class);
+            intent.putExtra("email", email);
+            startActivity(intent);
+        }
+        
+        @Override
+        public void onError(String err) {
+            int ErrorCode = Integer.parseInt(err);
+            switch (ErrorCode){
+                case 409:
+                    msg_textView.setText("Email already registered please login");
+                    break;
+                case 500:
+                    msg_textView.setText("Something went Wrong...");
+                    break;
+            }
+        }
+    });
+}
+```
+
+#### Step 2: OTP Verification
+
+```java activities/authActivities/registerActivities/VerifyEmailOtpActivity.java
+String otp = mainXMl.otpField.getText().toString();
+
+if(otp.length() != 6){
+    mainXMl.msgTextView.setText("Otp must be 6-digit");
+} else {
+    otpManager.VerifyOtpEmail(email, otp, 
+        new NetworkCallbackInterfaceWithJsonObjectDelivery() {
+        @Override
+        public void onSuccess(JSONObject response) {
+            // Get temporary token for registration completion
+            String token = response.getString("token");
+            
+            // Proceed to password creation
+            Intent intent = new Intent(getApplicationContext(), 
+                                      CreatePasswordActivity.class);
+            intent.putExtra("token", token);
+            intent.putExtra("api", ApiEndPoints.REGISTER_EMAIL);
+            startActivity(intent);
+        }
+    });
+}
+```
+
+<Card title="OTP Resend" icon="rotate">
+Users can request a new OTP if they didn't receive the code:
+
+```java
+mainXMl.resendOtpBtn.setOnClickListener(v -> handleOtpResend());
+```
+</Card>
+
+### Mobile Registration
+
+The mobile registration flow (`SignUpMobileActivity`) follows a similar pattern:
+1. Enter mobile number
+2. Receive OTP via SMS
+3. Verify OTP
+4. Create password
+5. Complete profile
+
+## Password Management
+
+### Forgot Password Flow
+
+Users can reset their password through `ForgetPasswordActivity`:
+
+```java network_managers/AuthManager.java
+public void ForgetPasswordWithEmail(String password, String token, 
+                                   NetworkCallbackInterface callback) {
+    String url = ApiEndPoints.FORGET_PASSWORD_EMAIL;
+    JSONObject data = new JSONObject();
+    data.put("password", password);
+    
+    AndroidNetworking.post(url)
+        .addApplicationJsonBody(data)
+        .addHeaders("Authorization", "Bearer " + token)
+        .build()
+        .getAsJSONObject(new JSONObjectRequestListener() {
+            @Override
+            public void onResponse(JSONObject response) {
+                callback.onSuccess();
+            }
+        });
+}
+```
+
+### Password Change (Settings)
+
+Loggedusers can change their password from settings:
+
+```java network_managers/AuthManager.java
+public void ResetPassword(String oldPassword, String newPassword, 
+                         NetworkCallbackInterfaceJsonObject callback) 
+                         throws JSONException {
+    String Url = ApiEndPoints.RESET_PASSWORD_SETTING;
+    JSONObject packet = new JSONObject();
+    packet.put("oldPassword", oldPassword);
+    packet.put("newPassword", newPassword);
+    AndroidNetworkingLayer.post(Url, packet, callback);
+}
+```
+
+## Session Management
+
+After successful authentication, user credentials are stored in `SharedPreferences`:
+
+```java
+preferenceEditor.putString(SharedPreferencesKeys.UUID, uuid);
+preferenceEditor.putString(SharedPreferencesKeys.JWT_TOKEN, token);
+preferenceEditor.putBoolean(SharedPreferencesKeys.IS_LOGGED_IN, true);
+preferenceEditor.putString(SharedPreferencesKeys.USER_NAME, username);
+preferenceEditor.putString(SharedPreferencesKeys.USER_ID, userid);
+preferenceEditor.putString(SharedPreferencesKeys.USER_PROFILE_PIC, profileUrl);
+preferenceEditor.putBoolean(SharedPreferencesKeys.IS_PRIVATE, isPrivate == 1);
+preferenceEditor.apply();
+```
+
+## Logout
+
+The logout process clears the session and notifies the server:
+
+```java network_managers/AuthManager.java
+public void logout(NetworkCallbackInterface callbackInterface){
+    String url = ApiEndPoints.LOGOUT;
+    AndroidNetworking.get(url)
+        .setPriority(Priority.HIGH)
+        .addHeaders("Authorization", "Bearer " + PreferenceUtil.getJWT())
+        .build()
+        .getAsJSONObject(new JSONObjectRequestListener() {
+            @Override
+            public void onResponse(JSONObject response) {
+                callbackInterface.onSuccess();
+            }
+        });
+}
+```
+
+## Security Features
+
+<CardGroup cols={2}>
+  <Card title="JWT Authentication" icon="key">
+    All API requests include a JWT token in the Authorization header for secure authentication.
+  </Card>
+  
+  <Card title="OTP Verification" icon="shield-check">
+    6-digit OTP codes verify email and mobile numbers during registration.
+  </Card>
+  
+  <Card title="Password Visibility Toggle" icon="eye">
+    Users can toggle password visibility during login and registration.
+  </Card>
+  
+  <Card title="Session Persistence" icon="clock">
+    User sessions persist across app restarts using SharedPreferences.
+  </Card>
+</CardGroup>
+
+## UI Components
+
+### Password Toggle
+
+```java activities/authActivities/loginActivities/LoginActivity.java
+private void togglePasswordEdittext() {
+    isTypePassword = !isTypePassword;
+    if(isTypePassword){
+        password_filed.setInputType(InputType.TYPE_CLASS_TEXT | 
+                                   InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        toggleBtn.setImageResource(R.drawable.show_icon);
+    } else {
+        password_filed.setInputType(InputType.TYPE_CLASS_TEXT);
+        toggleBtn.setImageResource(R.drawable.hide_icon);
+    }
+}
+```
+
+### Login Error Dialog
+
+```java
+private void showDialog(){
+    AlertDialog dialog = new AlertDialog.Builder(LoginActivity.this).create();
+    dialog.setTitle("That login info didn't work");
+    dialog.setMessage("Check your username, mobile number, email or password");
+    dialog.setButton(AlertDialog.BUTTON_POSITIVE, "ok", 
+                    (dialog1, which) -> dialog1.dismiss());
+    dialog.show();
+}
+```
+
+## Related Files
+
+- `network_managers/AuthManager.java` - Core authentication logic
+- `network_managers/OtpManager.java` - OTP sending and verification
+- `activities/authActivities/loginActivities/LoginActivity.java` - Main login screen
+- `activities/authActivities/registerActivities/` - Registration flow activities
+- `activities/authActivities/forgetPassword/` - Password reset activities
+- `utils/LoginSequenceUtil.java` - Post-login initialization

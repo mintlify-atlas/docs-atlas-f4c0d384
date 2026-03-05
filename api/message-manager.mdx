@@ -1,0 +1,383 @@
+---
+title: 'MessageManager'
+description: 'Direct messaging and chat functionality'
+icon: 'message'
+---
+
+## Overview
+
+The `MessageManager` class handles all messaging operations in Threadly, including sending messages, retrieving conversations, uploading media in messages, managing message status, and handling message deletion. All methods are static for convenient access throughout the application.
+
+## Methods
+
+### sendMessage
+
+Sends a message to another user.
+
+```java
+public static void sendMessage(JSONObject object)
+```
+
+<ParamField path="object" type="JSONObject" required>
+  Message object containing sender, receiver, content, and metadata
+</ParamField>
+
+The JSONObject should include:
+- `senderUUId` (String) - Sender's unique identifier
+- `recieverUUId` (String) - Receiver's unique identifier
+- `message` (String) - Message content
+- `type` (String) - Message type (text, image, video, etc.)
+- `MsgUid` (String) - Unique message identifier
+
+#### Example
+
+```java
+JSONObject messageData = new JSONObject();
+messageData.put("senderUUId", "sender-uuid-123");
+messageData.put("recieverUUId", "receiver-uuid-456");
+messageData.put("message", "Hello! How are you?");
+messageData.put("type", "text");
+messageData.put("MsgUid", UUID.randomUUID().toString());
+
+MessageManager.sendMessage(messageData);
+```
+
+### getaAndUpdatePendingMessagesFromServer
+
+Retrieves and stores pending messages from a specific sender.
+
+```java
+public static void getaAndUpdatePendingMessagesFromServer(String senderUUid)
+```
+
+<ParamField path="senderUUid" type="String" required>
+  UUID of the sender whose messages to retrieve
+</ParamField>
+
+This method:
+- Fetches pending messages from the server
+- Stores them in the local database
+- Updates conversation history
+- Automatically handles message synchronization
+
+#### Example
+
+```java
+MessageManager.getaAndUpdatePendingMessagesFromServer("sender-uuid-123");
+```
+
+### checkAndGetPendingMessages
+
+Checks for pending messages from all conversations and retrieves them.
+
+```java
+public static void checkAndGetPendingMessages()
+```
+
+This method:
+- Checks all active conversations for new messages
+- Automatically fetches pending messages
+- Updates local storage
+- Should be called periodically or on app resume
+
+#### Example
+
+```java
+// Call when app resumes or periodically
+MessageManager.checkAndGetPendingMessages();
+```
+
+### setSeenMessage
+
+Marks messages as seen/read.
+
+```java
+public static void setSeenMessage(
+    List<String> MessageUids,
+    String senderUUid,
+    String receiverUUid,
+    NetworkCallbackInterface callbackInterface
+) throws JSONException
+```
+
+<ParamField path="MessageUids" type="List<String>" required>
+  List of message UIDs to mark as seen
+</ParamField>
+
+<ParamField path="senderUUid" type="String" required>
+  UUID of the message sender
+</ParamField>
+
+<ParamField path="receiverUUid" type="String" required>
+  UUID of the message receiver (current user)
+</ParamField>
+
+<ParamField path="callbackInterface" type="NetworkCallbackInterface" required>
+  Callback interface to handle the response
+</ParamField>
+
+#### Example
+
+```java
+List<String> messageIds = Arrays.asList("msg-uid-1", "msg-uid-2", "msg-uid-3");
+
+try {
+    MessageManager.setSeenMessage(
+        messageIds,
+        "sender-uuid-123",
+        "receiver-uuid-456",
+        new NetworkCallbackInterface() {
+            @Override
+            public void onSuccess() {
+                // Messages marked as seen
+            }
+            
+            @Override
+            public void onError(String err) {
+                // Handle error
+            }
+        });
+} catch (JSONException e) {
+    // Handle exception
+}
+```
+
+### UploadMsgMedia
+
+Uploads media files (images, videos) to be sent in messages.
+
+```java
+public static void UploadMsgMedia(
+    File filepath,
+    String Tag,
+    NetworkCallbackInterfaceWithProgressTracking callbackInterfaceWithProgressTracking
+)
+```
+
+<ParamField path="filepath" type="File" required>
+  Media file to upload
+</ParamField>
+
+<ParamField path="Tag" type="String" required>
+  Unique tag to identify and potentially cancel the upload
+</ParamField>
+
+<ParamField path="callbackInterfaceWithProgressTracking" type="NetworkCallbackInterfaceWithProgressTracking" required>
+  Callback interface to handle upload progress and response
+</ParamField>
+
+<ResponseField name="response" type="JSONObject">
+  Contains the uploaded media URL and metadata
+</ResponseField>
+
+#### Example
+
+```java
+File mediaFile = new File("/path/to/photo.jpg");
+String uploadTag = "upload-" + System.currentTimeMillis();
+
+MessageManager.UploadMsgMedia(
+    mediaFile,
+    uploadTag,
+    new NetworkCallbackInterfaceWithProgressTracking() {
+        @Override
+        public void progress(long bytesUploaded, long totalBytes) {
+            int percentage = (int) ((bytesUploaded * 100) / totalBytes);
+            // Update progress UI
+        }
+        
+        @Override
+        public void onSuccess(JSONObject response) {
+            String mediaUrl = response.optString("url");
+            // Send message with media URL
+        }
+        
+        @Override
+        public void onError(String error) {
+            // Handle error
+        }
+    });
+```
+
+### CancelMessageMediaUploadRequest
+
+Cancels an ongoing media upload.
+
+```java
+public static void CancelMessageMediaUploadRequest(String Tag)
+```
+
+<ParamField path="Tag" type="String" required>
+  Tag of the upload request to cancel (same tag used in UploadMsgMedia)
+</ParamField>
+
+#### Example
+
+```java
+String uploadTag = "upload-123456789";
+// User cancels the upload
+MessageManager.CancelMessageMediaUploadRequest(uploadTag);
+```
+
+### GetAllChatsAssociatedWithUser
+
+Retrieves all chat conversations for the current user.
+
+```java
+public static void GetAllChatsAssociatedWithUser(
+    NetworkCallbackInterfaceWithJsonObjectDelivery callback
+)
+```
+
+<ParamField path="callback" type="NetworkCallbackInterfaceWithJsonObjectDelivery" required>
+  Callback interface to handle the response
+</ParamField>
+
+<ResponseField name="response" type="JSONObject">
+  Array of conversation objects with last message, participant info, and unread count
+</ResponseField>
+
+#### Example
+
+```java
+MessageManager.GetAllChatsAssociatedWithUser(
+    new NetworkCallbackInterfaceWithJsonObjectDelivery() {
+        @Override
+        public void onSuccess(JSONObject response) {
+            JSONArray chats = response.optJSONArray("chats");
+            // Display chat list
+        }
+        
+        @Override
+        public void onError(String error) {
+            // Handle error
+        }
+    });
+```
+
+### DeleteMessageForLoggedInUser
+
+Deletes a message for the current user only (other participant can still see it).
+
+```java
+public static void DeleteMessageForLoggedInUser(
+    String MsgUid,
+    String Role,
+    NetworkCallbackInterface callbackInterface
+)
+```
+
+<ParamField path="MsgUid" type="String" required>
+  Unique identifier of the message to delete
+</ParamField>
+
+<ParamField path="Role" type="String" required>
+  User's role in the conversation ("sender" or "receiver")
+</ParamField>
+
+<ParamField path="callbackInterface" type="NetworkCallbackInterface" required>
+  Callback interface to handle the response
+</ParamField>
+
+#### Example
+
+```java
+MessageManager.DeleteMessageForLoggedInUser(
+    "msg-uid-123",
+    "sender",
+    new NetworkCallbackInterface() {
+        @Override
+        public void onSuccess() {
+            // Message deleted for user
+        }
+        
+        @Override
+        public void onError(String err) {
+            // Handle error
+        }
+    });
+```
+
+### unSendMessage
+
+Unsends a message, removing it for both sender and receiver.
+
+```java
+public static void unSendMessage(
+    String messageUid,
+    String receiverUUid,
+    NetworkCallbackInterface callbackInterface
+)
+```
+
+<ParamField path="messageUid" type="String" required>
+  Unique identifier of the message to unsend
+</ParamField>
+
+<ParamField path="receiverUUid" type="String" required>
+  UUID of the message receiver
+</ParamField>
+
+<ParamField path="callbackInterface" type="NetworkCallbackInterface" required>
+  Callback interface to handle the response
+</ParamField>
+
+#### Example
+
+```java
+MessageManager.unSendMessage(
+    "msg-uid-123",
+    "receiver-uuid-456",
+    new NetworkCallbackInterface() {
+        @Override
+        public void onSuccess() {
+            // Message unsent successfully
+        }
+        
+        @Override
+        public void onError(String err) {
+            // Handle error
+        }
+    });
+```
+
+## Message Model Structure
+
+Messages follow the structure defined in MessageSchema.java:8:
+
+- `messageUid` (String) - Unique message identifier
+- `conversationId` (String) - Conversation identifier
+- `replyToMsgId` (String) - ID of message being replied to (if any)
+- `senderId` (String) - Sender's UUID
+- `receiverId` (String) - Receiver's UUID
+- `msg` (String) - Message content
+- `type` (String) - Message type (text, image, video, post)
+- `timestamp` (String) - Message timestamp in ISO 8601 format
+- `deliveryStatus` (int) - Delivery status code (0=pending, 1=sent, 2=delivered, 3=seen)
+- `isDeleted` (boolean) - Whether message is deleted
+- `postId` (int) - ID of shared post (if type is post)
+- `postLink` (String) - Link to shared post
+
+## Delivery Status Codes
+
+- `0` - Pending (queued for sending)
+- `1` - Sent (delivered to server)
+- `2` - Delivered (received by recipient's device)
+- `3` - Seen (read by recipient)
+
+## API Endpoints Used
+
+- `POST /api/messages/send` - Send message
+- `POST /api/messages/pending` - Get pending messages from sender
+- `GET /api/messages/check-pending` - Check for pending messages
+- `POST /api/messages/seen` - Mark messages as seen
+- `POST /api/messages/upload-media` - Upload message media
+- `GET /api/messages/chats` - Get all chats
+- `PATCH /api/messages/delete` - Delete message for user
+- `PATCH /api/messages/unsend` - Unsend message
+
+## Related Components
+
+- [ProfileManager](/api/profile-manager) - User profile information
+- [PostsManager](/api/posts-manager) - Share posts in messages
+- See MessageManager.java:34 for implementation details

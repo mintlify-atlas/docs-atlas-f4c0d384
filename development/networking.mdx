@@ -1,0 +1,347 @@
+---
+title: Networking
+description: HTTP networking implementation using Fast Android Networking library
+---
+
+## Overview
+
+Threadly uses the **Fast Android Networking** library built on top of OkHttp for all REST API communications. The networking layer is organized into manager classes, each responsible for a specific domain of the application.
+
+## Networking Architecture
+
+### Base Layer: AndroidNetworkingLayer
+
+The `AndroidNetworkingLayer` class provides a centralized interface for making HTTP requests with automatic JWT authentication:
+
+```java
+public class AndroidNetworkingLayer {
+    public static void get(String Url, NetworkCallbackInterfaceJsonObject callbackInterfaceJsonObject){
+        AndroidNetworking.get(Url)
+            .setPriority(Priority.HIGH)
+            .addHeaders("Authorization", "Bearer " + PreferenceUtil.getJWT())
+            .build()
+            .getAsJSONObject(new JSONObjectRequestListener() {
+                @Override
+                public void onResponse(JSONObject jsonObject) {
+                    callbackInterfaceJsonObject.onSuccess(jsonObject);
+                }
+
+                @Override
+                public void onError(ANError anError) {
+                    callbackInterfaceJsonObject.onError(anError.getErrorCode());
+                }
+            });
+    }
+    
+    public static void post(String Url, JSONObject object, 
+                           NetworkCallbackInterfaceJsonObject callbackInterfaceJsonObject){
+        AndroidNetworking.post(Url)
+            .setPriority(Priority.HIGH)
+            .addHeaders("Authorization", "Bearer " + PreferenceUtil.getJWT())
+            .addApplicationJsonBody(object)
+            .build()
+            .getAsJSONObject(/* ... */);
+    }
+}
+```
+
+Location: `network_managers/AndroidNetworkingLayer.java:15`
+
+### Manager Classes
+
+Threadly organizes API calls into domain-specific manager classes:
+
+| Manager | Responsibility | Key Methods |
+|---------|----------------|-------------|
+| **PostsManager** | Posts CRUD operations | `uploadImagePost()`, `getImageFeed()`, `getUserPosts()` |
+| **MessageManager** | Messaging operations | `sendMessage()`, `checkAndGetPendingMessages()` |
+| **AuthManager** | Authentication | Login, registration, OTP verification |
+| **ProfileManager** | User profiles | `getProfile()`, `getLoggedInUserProfile()` |
+| **LikeManager** | Like/unlike actions | `likePost()`, `unlikePost()` |
+| **FollowManager** | Follow relationships | `follow()`, `unfollow()`, `getFollowers()` |
+| **CommentsManager** | Comment operations | `getComments()`, `addComment()` |
+| **StoriesManager** | Stories feature | `addStory()`, `getStories()` |
+| **SearchManager** | Search functionality | User and content search |
+| **PrivacyManager** | Privacy settings | `setPrivate()`, `setPublic()` |
+
+Location: `network_managers/` directory
+
+## API Configuration
+
+### Base URL & Endpoints
+
+API endpoints are centralized in the `ApiEndPoints` class:
+
+```java
+public class ApiEndPoints {
+    private static final String baseUrl = BuildConfig.BASE_URL;
+    // https://threadlyserver.onrender.com/api
+    
+    // Posts endpoints
+    public static final String GET_IMAGE_FEED = baseUrl + "/posts/getImagePostsFeed/";
+    public static final String GET_VIDEO_FEED = baseUrl + "/posts/getVideoPostsFeed/";
+    public static final String ADD_IMAGE_POST = baseUrl + "/posts/addImagePost/";
+    public static final String GET_POST_BY_ID = baseUrl + "/posts/getPost/";
+    public static final String GET_USER_POSTS = baseUrl + "/posts/getUserPosts/";
+    public static final String DELETE_POST = baseUrl + "/posts/removePost/";
+    
+    // Message endpoints
+    public static final String SEND_MESSAGE = baseUrl + "/messages/sendMessage/";
+    public static final String GET_PENDING_MESSAGES = baseUrl + "/messages/getPendingMessages/";
+    public static final String CHECK_PENDING_MESSAGES = baseUrl + "/messages/checkPendingMessages/";
+    public static final String GET_ALL_CHATS = baseUrl + "/messages/getAllChats/";
+    
+    // Authentication endpoints
+    public static final String LOGIN_EMAIL = baseUrl + "/auth/login/email/";
+    public static final String LOGIN_MOBILE = baseUrl + "/auth/login/mobile/";
+    public static final String REGISTER_EMAIL = baseUrl + "/auth/register/email/";
+    
+    // Socket.IO endpoint
+    public static final String SOCKET_ID = "https://threadlyserver.onrender.com";
+}
+```
+
+Location: `constants/ApiEndPoints.java:1`
+
+## HTTP Methods
+
+### GET Requests
+
+```java
+// Example: Fetching user posts with pagination
+public void getUserPosts(int page, String userId, 
+                        NetworkCallbackInterfaceJsonObject callbackInterface) {
+    String url = ApiEndPoints.GET_USER_POSTS.concat(userId);
+    AndroidNetworking.get(url)
+        .setPriority(Priority.HIGH)
+        .addQueryParameter("page", Integer.toString(page))
+        .addHeaders("Authorization", "Bearer " + getToken())
+        .build()
+        .getAsJSONObject(new JSONObjectRequestListener() {
+            @Override
+            public void onResponse(JSONObject response) {
+                callbackInterface.onSuccess(response);
+            }
+
+            @Override
+            public void onError(ANError anError) {
+                if(BuildConfig.DEBUG){
+                    Log.d("ApiError", "Error" + anError.getMessage());
+                }
+                callbackInterface.onError(anError.getErrorCode());
+            }
+        });
+}
+```
+
+Location: `network_managers/PostsManager.java:108`
+
+### POST Requests
+
+```java
+// Example: Sending a message
+public static void sendMessage(JSONObject object){
+    String url = ApiEndPoints.SEND_MESSAGE;
+    AndroidNetworking.post(url)
+        .setPriority(Priority.HIGH)
+        .addHeaders("Authorization", "Bearer " + getToken())
+        .addApplicationJsonBody(object)
+        .build()
+        .getAsJSONObject(new JSONObjectRequestListener() {
+            @Override
+            public void onResponse(JSONObject response) {
+                JSONObject data = response.optJSONObject("data");
+                String msgUid = data.optString("MsgUid");
+                int deliveryStatus = data.optInt("deliveryStatus");
+                ReUsableFunctions.updateMessageStatus(msgUid, deliveryStatus);
+            }
+
+            @Override
+            public void onError(ANError anError) {
+                Log.d(TAG, "Error in sending message: " + anError.getErrorDetail());
+            }
+        });
+}
+```
+
+Location: `network_managers/MessageManager.java:36`
+
+### File Upload with Progress
+
+```java
+// Example: Uploading an image post with progress tracking
+public void uploadImagePost(File imagefile, String caption, 
+                           NetworkCallbackInterfaceWithProgressTracking callback){
+    String url = ApiEndPoints.ADD_IMAGE_POST;
+    AndroidNetworking.upload(url)
+        .setPriority(Priority.HIGH)
+        .addHeaders("Authorization", "Bearer " + getToken())
+        .addMultipartFile("image", imagefile)
+        .addMultipartParameter("caption", caption)
+        .build()
+        .setUploadProgressListener(new UploadProgressListener() {
+            @Override
+            public void onProgress(long bytesUploaded, long totalBytes) {
+                callback.progress(bytesUploaded, totalBytes);
+            }
+        })
+        .getAsJSONObject(new JSONObjectRequestListener() {
+            @Override
+            public void onResponse(JSONObject response) {
+                callback.onSuccess(response);
+            }
+
+            @Override
+            public void onError(ANError anError) {
+                callback.onError(anError.toString());
+            }
+        });
+}
+```
+
+Location: `network_managers/PostsManager.java:32`
+
+### DELETE Requests
+
+```java
+// Example: Removing a post
+public void RemovePost(int postId, NetworkCallbackInterface callbackInterface){
+    String URL = ApiEndPoints.DELETE_POST + Integer.toString(postId);
+    
+    AndroidNetworking.delete(URL)
+        .addHeaders("Authorization", "Bearer " + getToken())
+        .setPriority(Priority.HIGH)
+        .build()
+        .getAsJSONObject(new JSONObjectRequestListener() {
+            @Override
+            public void onResponse(JSONObject response) {
+                callbackInterface.onSuccess();
+            }
+
+            @Override
+            public void onError(ANError anError) {
+                callbackInterface.onError(anError.toString());
+            }
+        });
+}
+```
+
+Location: `network_managers/PostsManager.java:223`
+
+## Authentication
+
+### JWT Token Management
+
+All authenticated requests include a JWT bearer token in the Authorization header:
+
+```java
+private String getToken(){
+    return loginInfo.getString(SharedPreferencesKeys.JWT_TOKEN, "null");
+}
+
+// Used in requests:
+.addHeaders("Authorization", "Bearer " + getToken())
+```
+
+The JWT token is:
+- Stored in SharedPreferences after successful login
+- Automatically attached to all API requests
+- Retrieved using `PreferenceUtil.getJWT()`
+
+## Callback Interfaces
+
+Threadly uses custom callback interfaces for handling async responses:
+
+### Basic Callback
+
+```java
+public interface NetworkCallbackInterface {
+    void onSuccess();
+    void onError(String error);
+}
+```
+
+### JSON Response Callback
+
+```java
+public interface NetworkCallbackInterfaceJsonObject {
+    void onSuccess(JSONObject jsonObject);
+    void onError(int errorCode);
+}
+```
+
+### Progress Tracking Callback
+
+```java
+public interface NetworkCallbackInterfaceWithProgressTracking {
+    void onSuccess(JSONObject response);
+    void onError(String error);
+    void progress(long bytesUploaded, long totalBytes);
+}
+```
+
+## Error Handling
+
+### Error Response Structure
+
+```java
+@Override
+public void onError(ANError anError) {
+    // Log error in debug mode
+    if(BuildConfig.DEBUG){
+        Log.d("ApiError", "Error: " + anError.getMessage());
+    }
+    
+    // Available error information:
+    // - anError.getErrorCode()    // HTTP status code
+    // - anError.getErrorBody()    // Response body
+    // - anError.getErrorDetail()  // Detailed message
+    // - anError.getMessage()      // Error message
+    
+    callbackInterface.onError(anError.getErrorCode());
+}
+```
+
+## Request Priority
+
+All requests are set to `Priority.HIGH` to ensure responsive user experience:
+
+```java
+AndroidNetworking.get(url)
+    .setPriority(Priority.HIGH)  // HIGH priority for all requests
+    .build()
+```
+
+## Request Cancellation
+
+For long-running uploads, requests can be cancelled using tags:
+
+```java
+// Tagging a request
+AndroidNetworking.upload(url)
+    .setTag("UPLOAD_MESSAGE_MEDIA")
+    .build()
+
+// Cancelling by tag
+public static void CancelMessageMediaUploadRequest(String Tag){
+    AndroidNetworking.cancel(Tag);
+}
+```
+
+Location: `network_managers/MessageManager.java:227`
+
+## Best Practices
+
+1. **Centralized endpoint management** - All URLs defined in `ApiEndPoints`
+2. **Automatic authentication** - JWT tokens added automatically via `AndroidNetworkingLayer`
+3. **Callback-based async handling** - Clean separation of success/error paths
+4. **Domain-specific managers** - Organized by feature area
+5. **Progress tracking** - User feedback for long-running operations
+6. **Error logging** - Debug logging for development troubleshooting
+7. **Request prioritization** - High priority for better UX
+
+## Related Topics
+
+- [Real-Time Communication](/development/real-time-communication) - Socket.IO for live updates
+- [Offline Support](/development/offline-support) - Caching and sync strategies
+- [Tech Stack](/development/tech-stack) - Complete technology overview

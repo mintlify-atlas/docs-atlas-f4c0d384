@@ -1,0 +1,620 @@
+---
+title: Offline Support
+description: Local data persistence and offline-first architecture using Room Database
+---
+
+## Overview
+
+Threadly implements comprehensive offline support using **Room Database**, an abstraction layer over SQLite. This enables the app to function seamlessly even without network connectivity, with automatic synchronization when the connection is restored.
+
+## Architecture
+
+### Offline-First Strategy
+
+```
+┌─────────────────────────────────────────┐
+│           User Action                   │
+└───────────────┬─────────────────────────┘
+                │
+                ▼
+┌─────────────────────────────────────────┐
+│     1. Save to Room Database            │
+│        (Immediate, always works)        │
+└───────────────┬─────────────────────────┘
+                │
+                ▼
+┌─────────────────────────────────────────┐
+│     2. Attempt Network Sync             │
+│        (Background, when available)     │
+└───────────────┬─────────────────────────┘
+                │
+        ┌───────┴────────┐
+        ▼                ▼
+    Success          Failure
+        │                │
+        ▼                ▼
+  Update Status    Retry Later
+```
+
+## Room Database Setup
+
+### Database Configuration
+
+```java
+@Database(
+    entities = {
+        MessageSchema.class, 
+        HistorySchema.class, 
+        NotificationSchema.class
+    },
+    version = 1,
+    exportSchema = false
+)
+public abstract class DataBase extends RoomDatabase {
+    public static final String DB_NAME = "Threadly";
+    public static DataBase instance;
+    
+    public static synchronized DataBase getInstance(){
+        if (instance == null){
+            instance = Room.databaseBuilder(
+                Threadly.getGlobalContext(),
+                DataBase.class,
+                DB_NAME
+            ).build();
+        }
+        return instance;
+    }
+    
+    // Data Access Objects
+    public abstract operator MessageDao();
+    public abstract HistoryOperator historyOperator();
+    public abstract NotificationDao notificationDao();
+}
+```
+
+Location: `RoomDb/DataBase.java:1`
+
+### Key Features
+
+| Feature | Implementation |
+|---------|----------------|
+| **Singleton Pattern** | Single database instance app-wide |
+| **Thread-Safe** | Synchronized getInstance() method |
+| **Multi-Entity** | Messages, history, and notifications |
+| **Background Operations** | All DB operations run off main thread |
+
+## Database Entities
+
+### MessageSchema
+
+Stores all chat messages with delivery status and metadata:
+
+```java
+@Entity(tableName = "messages")
+public class MessageSchema {
+    @PrimaryKey(autoGenerate = true)
+    private long msgId;
+    
+    @ColumnInfo(name = "messageUid")
+    private String messageUid;
+    
+    @ColumnInfo(name = "conversationId")
+    private String conversationId;
+    
+    @ColumnInfo(name = "replyToMsgId")
+    private String replyToMsgId;
+    
+    @ColumnInfo(name = "senderId")
+    private String senderId;
+    
+    @ColumnInfo(name = "receiverId")
+    private String receiverId;
+    
+    @ColumnInfo(name = "msg")
+    private String msg;
+    
+    @ColumnInfo(name = "type")
+    private String type;  // text, image, video, etc.
+    
+    @ColumnInfo(name = "postId")
+    private int postId;
+    
+    @ColumnInfo(name = "postLink")
+    private String postLink;
+    
+    @ColumnInfo(name = "timestamp")
+    private String timestamp;
+    
+    @ColumnInfo(name = "deliveryStatus")
+    private int deliveryStatus;  // 0=pending, 1=sent, -1=delivered, -2=seen
+    
+    @ColumnInfo(name = "isDeleted")
+    private boolean isDeleted;
+    
+    @ColumnInfo(name = "mediaLocalPath")
+    private String mediaLocalPath;  // Local file path for offline access
+    
+    @ColumnInfo(name = "mediaUploadState")
+    private String mediaUploadState;  // pending, uploading, uploaded, failed
+    
+    @ColumnInfo(name = "totalSize")
+    private long totalSize;
+    
+    @ColumnInfo(name = "uploadedSize")
+    private long uploadedSize;  // For upload progress tracking
+    
+    // Constructors, getters, and setters...
+}
+```
+
+Location: `RoomDb/schemas/MessageSchema.java:1`
+
+### Message Status Flow
+
+| Status | Code | Meaning | UI Indicator |
+|--------|------|---------|---------------|
+| Pending | `0` | Saved locally, awaiting send | Clock icon |
+| Sent | `1` | Sent to server | Single check |
+| Delivered | `-1` | Received by recipient's device | Double check |
+| Seen | `-2` | Read by recipient | Blue double check |
+
+## Data Access Objects (DAOs)
+
+### Message DAO Operations
+
+```java
+@Dao
+public interface operator {
+    // Insert operations
+    @Insert
+    void insertMessage(MessageSchema message);
+    
+    @Insert
+    void insertMessage(List<MessageSchema> messages);
+    
+    // Query messages for a conversation
+    @Query("SELECT * FROM messages " +
+           "WHERE conversationId=:conversationId AND isDeleted=0 " +
+           "GROUP BY messageUid " +
+           "ORDER BY timestamp ASC")
+    LiveData<List<MessageSchema>> getMessagesCid(String conversationId);
+    
+    // Update delivery status
+    @Query("UPDATE messages " +
+           "SET deliveryStatus=:deliveryStatus " +
+           "WHERE messageUid=:msgUid AND isDeleted=0")
+    void updateDeliveryStatus(String msgUid, int deliveryStatus);
+    
+    // Get pending messages (for retry mechanism)
+    @Query("SELECT * FROM messages " +
+           "WHERE deliveryStatus=0 AND isDeleted=0")
+    List<MessageSchema> getPendingToSendMessages();
+    
+    // Unread message counts
+    @Query("SELECT COUNT(DISTINCT messageUid) as count " +
+           "FROM messages " +
+           "WHERE deliveryStatus=-1 AND receiverId=:rid AND isDeleted=0")
+    LiveData<Integer> getUnreadMessagesCount(String rid);
+    
+    @Query("SELECT COUNT(DISTINCT conversationId) as count " +
+           "FROM messages " +
+           "WHERE deliveryStatus=-1 AND receiverId=:rid AND isDeleted=0")
+    LiveData<Integer> getUnreadConversationCount(String rid);
+    
+    // Mark messages as seen
+    @Query("UPDATE messages " +
+           "SET deliveryStatus=-2 " +
+           "WHERE conversationId=:conversationId " +
+           "AND receiverId=:rid AND isDeleted=0")
+    void updateMessagesSeen(String conversationId, String rid);
+    
+    // Soft delete
+    @Query("UPDATE messages SET isDeleted=1 " +
+           "WHERE messageUid=:msgUid AND isDeleted=0")
+    void deleteMessage(String msgUid);
+    
+    // Media upload progress tracking
+    @Query("UPDATE messages " +
+           "SET totalSize=:totalSize, uploadedSize=:uploadedSize " +
+           "WHERE messageUid=:messageUid AND isDeleted=0")
+    void updateUploadProgress(String messageUid, long totalSize, long uploadedSize);
+    
+    // Get messages with failed uploads
+    @Query("SELECT * FROM messages " +
+           "WHERE mediaUploadState=:state1 AND isDeleted=0 " +
+           "ORDER BY timestamp DESC")
+    List<MessageSchema> getAllUnUploadedMessages(String state1);
+    
+    // Update media upload state
+    @Query("UPDATE messages " +
+           "SET postLink=:link, mediaUploadState=:mediaUploadState " +
+           "WHERE messageUid=:messageUid AND isDeleted=0")
+    void updatePostLinkWithState(String messageUid, String link, String mediaUploadState);
+}
+```
+
+Location: `RoomDb/Dao/operator.java:1`
+
+## Offline Workflows
+
+### Sending Messages Offline
+
+```java
+// 1. Create message with pending status
+String messageUid = UUID.randomUUID().toString();
+String timestamp = ISO8601Util.getCurrentTimestamp();
+
+MessageSchema message = new MessageSchema(
+    messageUid,
+    conversationId,
+    null,  // replyToMsgId
+    senderId,
+    receiverId,
+    messageText,
+    "text",
+    0,     // postId
+    null,  // postLink
+    timestamp,
+    0,     // deliveryStatus: 0 = pending
+    false  // isDeleted
+);
+
+// 2. Save to local database immediately (works offline)
+Executors.newSingleThreadExecutor().execute(() -> {
+    DataBase.getInstance().MessageDao().insertMessage(message);
+});
+
+// 3. Display message in UI immediately
+runOnUiThread(() -> {
+    chatAdapter.addMessage(message);
+});
+
+// 4. Attempt to send to server (background)
+if (isNetworkAvailable()) {
+    MessageManager.sendMessage(payload);
+} else {
+    // Will retry when network is restored
+    scheduleMessageRetry(messageUid);
+}
+```
+
+### Retrying Failed Messages
+
+```java
+public void retryPendingMessages() {
+    Executors.newSingleThreadExecutor().execute(() -> {
+        // Get all messages with pending status
+        List<MessageSchema> pendingMessages = 
+            DataBase.getInstance()
+                   .MessageDao()
+                   .getPendingToSendMessages();
+        
+        for (MessageSchema message : pendingMessages) {
+            // Build JSON payload
+            JSONObject payload = new JSONObject();
+            payload.put("messageUid", message.getMessageUid());
+            payload.put("message", message.getMsg());
+            payload.put("receiverId", message.getReceiverId());
+            payload.put("type", message.getType());
+            
+            // Retry sending
+            MessageManager.sendMessage(payload);
+        }
+    });
+}
+
+// Call this when network is restored
+private void onNetworkRestored() {
+    retryPendingMessages();
+    checkAndGetPendingMessages();  // Fetch messages received while offline
+}
+```
+
+### Loading Messages from Cache
+
+```java
+public void loadConversation(String conversationId) {
+    // Observe messages from local database
+    LiveData<List<MessageSchema>> messagesLiveData = 
+        DataBase.getInstance()
+               .MessageDao()
+               .getMessagesCid(conversationId);
+    
+    messagesLiveData.observe(this, messages -> {
+        // Update UI automatically when database changes
+        chatAdapter.setMessages(messages);
+        
+        // Scroll to bottom
+        recyclerView.scrollToPosition(messages.size() - 1);
+    });
+}
+```
+
+## Media Caching
+
+### Offline Media Access
+
+```java
+// Save media file locally and track in database
+public void sendImageMessage(File imageFile, String caption) {
+    String messageUid = UUID.randomUUID().toString();
+    String localPath = imageFile.getAbsolutePath();
+    
+    // Create message with local file path
+    MessageSchema message = new MessageSchema(
+        messageUid,
+        conversationId,
+        null,
+        senderId,
+        receiverId,
+        caption,
+        "image",
+        0,
+        null,
+        timestamp,
+        0,  // pending
+        false,
+        localPath,  // mediaLocalPath - for offline viewing
+        "pending",  // mediaUploadState
+        imageFile.length(),  // totalSize
+        0  // uploadedSize
+    );
+    
+    // Save to database
+    DataBase.getInstance().MessageDao().insertMessage(message);
+    
+    // Upload in background
+    uploadMediaWithProgress(messageUid, imageFile);
+}
+```
+
+### Upload Progress Tracking
+
+```java
+private void uploadMediaWithProgress(String messageUid, File mediaFile) {
+    MessageManager.UploadMsgMedia(
+        mediaFile,
+        messageUid,  // Tag for cancellation
+        new NetworkCallbackInterfaceWithProgressTracking() {
+            @Override
+            public void progress(long bytesUploaded, long totalBytes) {
+                // Update database with progress
+                DataBase.getInstance()
+                       .MessageDao()
+                       .updateUploadProgress(messageUid, totalBytes, bytesUploaded);
+                
+                // Update UI
+                int percentage = (int) ((bytesUploaded * 100) / totalBytes);
+                updateProgressUI(messageUid, percentage);
+            }
+            
+            @Override
+            public void onSuccess(JSONObject response) {
+                String mediaUrl = response.optString("url");
+                
+                // Update with server URL
+                DataBase.getInstance()
+                       .MessageDao()
+                       .updatePostLinkWithState(messageUid, mediaUrl, "uploaded");
+            }
+            
+            @Override
+            public void onError(String error) {
+                // Mark as failed for later retry
+                DataBase.getInstance()
+                       .MessageDao()
+                       .updateUploadState(messageUid, "failed");
+            }
+        }
+    );
+}
+```
+
+Location: `network_managers/MessageManager.java:198`
+
+### Retry Failed Uploads
+
+```java
+public void retryFailedUploads() {
+    Executors.newSingleThreadExecutor().execute(() -> {
+        List<MessageSchema> failedMessages = 
+            DataBase.getInstance()
+                   .MessageDao()
+                   .getAllUnUploadedMessages("failed");
+        
+        for (MessageSchema message : failedMessages) {
+            File mediaFile = new File(message.getMediaLocalPath());
+            
+            if (mediaFile.exists()) {
+                // Mark as pending and retry
+                DataBase.getInstance()
+                       .MessageDao()
+                       .updateUploadState(message.getMessageUid(), "pending");
+                
+                uploadMediaWithProgress(message.getMessageUid(), mediaFile);
+            } else {
+                // Local file deleted, remove from database
+                DataBase.getInstance()
+                       .MessageDao()
+                       .deleteMessage(message.getMessageUid());
+            }
+        }
+    });
+}
+```
+
+## LiveData Observation
+
+### Real-Time UI Updates
+
+Room's LiveData integration provides automatic UI updates when data changes:
+
+```java
+public class ChatActivity extends AppCompatActivity {
+    private LiveData<List<MessageSchema>> messagesLiveData;
+    private LiveData<Integer> unreadCountLiveData;
+    
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        
+        // Observe messages
+        messagesLiveData = DataBase.getInstance()
+            .MessageDao()
+            .getMessagesCid(conversationId);
+        
+        messagesLiveData.observe(this, messages -> {
+            // Automatically called when messages change
+            chatAdapter.updateMessages(messages);
+        });
+        
+        // Observe unread count
+        unreadCountLiveData = DataBase.getInstance()
+            .MessageDao()
+            .getUnreadMessagesCount(myUserId);
+        
+        unreadCountLiveData.observe(this, count -> {
+            // Update badge
+            updateUnreadBadge(count);
+        });
+    }
+}
+```
+
+## Background Sync with WorkManager
+
+### Periodic Sync Task
+
+```java
+public class MessageSyncWorker extends Worker {
+    public MessageSyncWorker(Context context, WorkerParameters params) {
+        super(context, params);
+    }
+    
+    @Override
+    public Result doWork() {
+        try {
+            // 1. Retry pending messages
+            retryPendingMessages();
+            
+            // 2. Fetch new messages from server
+            MessageManager.checkAndGetPendingMessages();
+            
+            // 3. Retry failed media uploads
+            retryFailedUploads();
+            
+            return Result.success();
+        } catch (Exception e) {
+            return Result.retry();
+        }
+    }
+}
+
+// Schedule periodic sync
+public void scheduleMessageSync() {
+    PeriodicWorkRequest syncWorkRequest = 
+        new PeriodicWorkRequest.Builder(
+            MessageSyncWorker.class,
+            15,  // Every 15 minutes
+            TimeUnit.MINUTES
+        )
+        .setConstraints(
+            new Constraints.Builder()
+                .setRequiredNetworkType(NetworkType.CONNECTED)
+                .build()
+        )
+        .build();
+    
+    WorkManager.getInstance(context)
+        .enqueueUniquePeriodicWork(
+            "message_sync",
+            ExistingPeriodicWorkPolicy.KEEP,
+            syncWorkRequest
+        );
+}
+```
+
+## Dependency
+
+```toml
+# gradle/libs.versions.toml
+roomRuntime = "2.6.1"
+workRuntime = "2.10.2"
+
+[libraries]
+androidx-room-runtime = { 
+    module = "androidx.room:room-runtime", 
+    version.ref = "roomRuntime" 
+}
+androidx-room-compiler = { 
+    module = "androidx.room:room-compiler", 
+    version.ref = "roomRuntime" 
+}
+androidx-work-runtime = { 
+    module = "androidx.work:work-runtime", 
+    version.ref = "workRuntime" 
+}
+```
+
+```groovy
+// app/build.gradle
+implementation libs.androidx.room.runtime
+annotationProcessor libs.androidx.room.compiler
+implementation libs.androidx.work.runtime
+```
+
+## Best Practices
+
+### 1. Always Use Background Threads
+
+```java
+// ✓ Good: Run DB operations off main thread
+Executors.newSingleThreadExecutor().execute(() -> {
+    DataBase.getInstance().MessageDao().insertMessage(message);
+});
+
+// ✗ Bad: DB operations on main thread (will crash)
+DataBase.getInstance().MessageDao().insertMessage(message);
+```
+
+### 2. Use LiveData for Reactive UI
+
+```java
+// ✓ Good: Observe LiveData for automatic updates
+LiveData<List<MessageSchema>> messages = dao.getMessagesCid(conversationId);
+messages.observe(this, list -> updateUI(list));
+
+// ✗ Bad: Manual polling
+while (true) {
+    List<MessageSchema> messages = dao.getMessagesCid(conversationId);
+    updateUI(messages);
+    Thread.sleep(1000);
+}
+```
+
+### 3. Implement Soft Deletes
+
+```java
+// ✓ Good: Mark as deleted (can be synced to server)
+@Query("UPDATE messages SET isDeleted=1 WHERE messageUid=:msgUid")
+void deleteMessage(String msgUid);
+
+// ✗ Bad: Hard delete (can't sync deletion to server)
+@Delete
+void deleteMessage(MessageSchema message);
+```
+
+### 4. Track Sync Status
+
+```java
+// Always include status fields for offline sync
+private int deliveryStatus;      // Track delivery state
+private String mediaUploadState; // Track upload state
+private boolean isDeleted;       // Track deletion state
+```
+
+## Related Topics
+
+- [Real-Time Communication](/development/real-time-communication) - Socket.IO for instant sync
+- [Networking](/development/networking) - HTTP API for data sync
+- [Tech Stack](/development/tech-stack) - Complete technology overview

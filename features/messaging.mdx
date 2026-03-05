@@ -1,0 +1,519 @@
+---
+title: 'Messaging'
+description: 'Real-time messaging with Socket.IO and FCM fallback'
+---
+
+## Overview
+
+Threadly's messaging system provides real-time direct messaging between users using Socket.IO for instant delivery, with Firebase Cloud Messaging (FCM) as a fallback for offline users.
+
+## Architecture
+
+The messaging system consists of three main components:
+
+<CardGroup cols={3}>
+  <Card title="Socket.IO" icon="bolt">
+    Real-time bidirectional communication for instant message delivery.
+  </Card>
+  
+  <Card title="Room Database" icon="database">
+    Local SQLite database for message persistence and offline access.
+  </Card>
+  
+  <Card title="FCM" icon="bell">
+    Push notifications for messages when the user is offline.
+  </Card>
+</CardGroup>
+
+## Socket Manager
+
+The `SocketManager` provides a singleton instance for WebSocket connections:
+
+```java SocketIo/SocketManager.java
+public class SocketManager {
+    private static SocketManager instance;
+    private final Socket msocket;
+    
+    private SocketManager() {
+        try {
+            msocket = IO.socket(ApiEndPoints.SOCKET_ID);
+        } catch (URISyntaxException e) {
+            throw new RuntimeException(e);
+        }
+    }
+    
+    public static synchronized SocketManager getInstance() {
+        if (instance == null) {
+            instance = new SocketManager();
+        }
+        return instance;
+    }
+    
+    public Socket getSocket() {
+        return msocket;
+    }
+    
+    public void connect() {
+        msocket.connect();
+    }
+    
+    public void disconnect() {
+        msocket.disconnect();
+        instance = null;
+    }
+}
+```
+
+<Note>
+The Socket.IO connection is established when the user logs in and maintained throughout the app session.
+</Note>
+
+## Message Manager
+
+The `MessageManager` handles all messaging operations:
+
+```java network_managers/MessageManager.java
+public class MessageManager {
+    public static void sendMessage(JSONObject object){
+        String url = ApiEndPoints.SEND_MESSAGE;
+        AndroidNetworking.post(url)
+            .setPriority(Priority.HIGH)
+            .addHeaders("Authorization", "Bearer " + 
+                Core.getPreference().getString(SharedPreferencesKeys.JWT_TOKEN, "null"))
+            .addApplicationJsonBody(object)
+            .build()
+            .getAsJSONObject(new JSONObjectRequestListener() {
+                @Override
+                public void onResponse(JSONObject response) {
+                    JSONObject object1 = response.optJSONObject("data");
+                    String MsgUid = object1.optString("MsgUid");
+                    int deliveryStatus = object1.optInt("deliveryStatus");
+                    ReUsableFunctions.updateMessageStatus(MsgUid, deliveryStatus);
+                }
+                
+                @Override
+                public void onError(ANError anError) {
+                    Log.d(Constants.NETWORK_ERROR_TAG.toString(), 
+                        "Error in sending message via http request " + anError.getErrorDetail());
+                }
+            });
+    }
+}
+```
+
+## Sending Messages
+
+Messages are sent through both Socket.IO (for real-time delivery) and HTTP (for reliability):
+
+<Steps>
+  <Step title="Create Message Object">
+    ```java
+    JSONObject messageData = new JSONObject();
+    messageData.put("messageUid", generateUniqueId());
+    messageData.put("senderUUId", myUUID);
+    messageData.put("recieverUUId", receiverUUID);
+    messageData.put("message", messageText);
+    messageData.put("type", "text");
+    messageData.put("deliveryStatus", 0);
+    ```
+  </Step>
+  
+  <Step title="Save to Local Database">
+    ```java
+    Executors.newSingleThreadExecutor().execute(() -> {
+        DataBase.getInstance().MessageDao().insertMessage(
+            new MessageSchema(MsgUid, conversationUid, replyToMsgUid,
+                senderUuid, receiverUuid, message, type, -1, 
+                "null", timeStamp, 0, false)
+        );
+    });
+    ```
+  </Step>
+  
+  <Step title="Emit via Socket.IO">
+    ```java
+    SocketManager.getInstance().getSocket().emit("send_message", messageData);
+    ```
+  </Step>
+  
+  <Step title="HTTP Backup">
+    ```java
+    MessageManager.sendMessage(messageData);
+    ```
+  </Step>
+</Steps>
+
+## Receiving Messages
+
+Messages are received through Socket.IO listeners and stored in Room database:
+
+```java
+SocketManager.getInstance().getSocket().on("new_message", args -> {
+    JSONObject data = (JSONObject) args[0];
+    String messageUid = data.optString("messageUid");
+    String senderUuid = data.optString("senderUUId");
+    String message = data.optString("message");
+    String type = data.optString("type");
+    String timestamp = data.optString("creationTime");
+    
+    // Save to database
+    Executors.newSingleThreadExecutor().execute(() -> {
+        DataBase.getInstance().MessageDao().insertMessage(
+            new MessageSchema(messageUid, conversationUid, null,
+                senderUuid, receiverUuid, message, type, -1,
+                "null", timestamp, 1, false)
+        );
+    });
+    
+    // Update UI
+    runOnUiThread(() -> {
+        messagesList.add(newMessage);
+        adapter.notifyItemInserted(messagesList.size() - 1);
+        recyclerView.smoothScrollToPosition(messagesList.size() - 1);
+    });
+});
+```
+
+## Pending Messages
+
+When a user comes online, pending messages are fetched from the server:
+
+```java network_managers/MessageManager.java
+public static void checkAndGetPendingMessages(){
+    String url = ApiEndPoints.CHECK_PENDING_MESSAGES;
+    AndroidNetworking.get(url)
+        .setPriority(Priority.HIGH)
+        .addHeaders("Authorization", "Bearer " + 
+            Core.getPreference().getString(SharedPreferencesKeys.JWT_TOKEN, "null"))
+        .build()
+        .getAsJSONObject(new JSONObjectRequestListener() {
+            @Override
+            public void onResponse(JSONObject response) {
+                JSONArray data = response.getJSONArray("data");
+                
+                if(data.length() > 0){
+                    for(int i = 0; i < data.length(); i++){
+                        JSONObject object = data.optJSONObject(i);
+                        String senderUUid = object.optString("senderUUid");
+                        int PendingMessages = object.optInt("messagesPending");
+                        
+                        Executors.newSingleThreadExecutor().execute(() -> {
+                            getaAndUpdatePendingMessagesFromServer(senderUUid);
+                        });
+                    }
+                }
+            }
+        });
+}
+
+public static void getaAndUpdatePendingMessagesFromServer(String senderUUid){
+    String url = ApiEndPoints.GET_PENDING_MESSAGES;
+    JSONObject object = new JSONObject();
+    object.put("senderUuid", senderUUid);
+    
+    AndroidNetworking.post(url)
+        .addApplicationJsonBody(object)
+        .build()
+        .getAsJSONObject(new JSONObjectRequestListener() {
+            @Override
+            public void onResponse(JSONObject response) {
+                JSONArray data = response.optJSONArray("data");
+                
+                if(data.length() > 0){
+                    new MessengerUtils().AddNewConversationHistory(senderUUid);
+                    
+                    for(int i = 0; i < data.length(); i++){
+                        JSONObject object1 = data.optJSONObject(i);
+                        // Extract message data and save to database
+                        String MsgUid = object1.optString("messageUid");
+                        String message = object1.optString("message");
+                        String type = object1.optString("type");
+                        // ... save to database
+                    }
+                }
+            }
+        });
+}
+```
+
+## Message Status Updates
+
+### Read Receipts
+
+When a user views messages, the seen status is updated:
+
+```java SocketIo/SocketEmitterEvents.java
+public static void UpdateSeenMsg_status(List<String> MessageUids, 
+                                       String senderUUid, 
+                                       String userid) throws JSONException {
+    JSONObject object = new JSONObject();
+    JSONArray UidsList = new JSONArray();
+    
+    for (String uid : MessageUids) {
+        UidsList.put(uid);
+    }
+    
+    object.put("senderUUid", senderUUid);
+    object.put("myUserid", userid);
+    object.put("uids", UidsList);
+    
+    SocketManager.getInstance().getSocket().emit("update_seen_msg_status", object);
+}
+```
+
+### HTTP Seen Status Update
+
+```java network_managers/MessageManager.java
+public static void setSeenMessage(List<String> MessageUids, 
+                                 String senderUUid, 
+                                 String receiverUUid, 
+                                 NetworkCallbackInterface callbackInterface) 
+                                 throws JSONException {
+    String Url = ApiEndPoints.UPDATE_MSG_SEEN_STATUS;
+    JSONObject object = new JSONObject();
+    JSONArray Uids = new JSONArray();
+    
+    for(String uids : MessageUids){
+        Uids.put(uids);
+    }
+    
+    object.put("senderUUid", senderUUid);
+    object.put("receiverUUid", receiverUUid);
+    object.put("uids", Uids);
+    
+    AndroidNetworking.post(Url)
+        .addApplicationJsonBody(object)
+        .build()
+        .getAsJSONObject(new JSONObjectRequestListener() {
+            @Override
+            public void onResponse(JSONObject response) {
+                callbackInterface.onSuccess();
+            }
+        });
+}
+```
+
+## Media Messages
+
+### Uploading Media
+
+```java network_managers/MessageManager.java
+public static void UploadMsgMedia(File filepath, 
+                                 String Tag, 
+                                 NetworkCallbackInterfaceWithProgressTracking callback){
+    String url = ApiEndPoints.UPLOAD_MEDIA_MESSAGE;
+    AndroidNetworking.upload(url)
+        .setPriority(Priority.HIGH)
+        .addHeaders("Authorization", "Bearer " + 
+            Core.getPreference().getString(SharedPreferencesKeys.JWT_TOKEN, "null"))
+        .setTag(Tag)
+        .addMultipartFile("media", filepath)
+        .build()
+        .setUploadProgressListener(new UploadProgressListener() {
+            @Override
+            public void onProgress(long bytesUploaded, long totalBytes) {
+                callback.progress(bytesUploaded, totalBytes);
+            }
+        })
+        .getAsJSONObject(new JSONObjectRequestListener() {
+            @Override
+            public void onResponse(JSONObject response) {
+                callback.onSuccess(response);
+            }
+            
+            @Override
+            public void onError(ANError anError) {
+                callback.onError(anError.toString());
+            }
+        });
+}
+```
+
+### Cancel Upload
+
+```java
+public static void CancelMessageMediaUploadRequest(String Tag){
+    AndroidNetworking.cancel(Tag);
+}
+```
+
+## Message Deletion
+
+### Delete for Me
+
+```java network_managers/MessageManager.java
+public static void DeleteMessageForLoggedInUser(String MsgUid, 
+                                               String Role, 
+                                               NetworkCallbackInterface callback){
+    String Url = ApiEndPoints.DELETE_MSG_WITH_ROLE;
+    JSONObject packet = new JSONObject();
+    packet.put("MsgUid", MsgUid);
+    packet.put("Role", Role);
+    
+    AndroidNetworking.patch(Url)
+        .setPriority(Priority.HIGH)
+        .addHeaders("Authorization", "Bearer " + PreferenceUtil.getJWT())
+        .addApplicationJsonBody(packet)
+        .build()
+        .getAsJSONObject(new JSONObjectRequestListener() {
+            @Override
+            public void onResponse(JSONObject response) {
+                callback.onSuccess();
+            }
+        });
+}
+```
+
+### Unsend Message
+
+```java
+public static void unSendMessage(String messageUid, 
+                                String receiverUUid, 
+                                NetworkCallbackInterface callback){
+    String Url = ApiEndPoints.UN_SEND_MESSAGE;
+    JSONObject packet = new JSONObject();
+    packet.put("MsgUid", messageUid);
+    packet.put("receiverUUid", receiverUUid);
+    
+    AndroidNetworking.patch(Url)
+        .setPriority(Priority.HIGH)
+        .addHeaders("Authorization", "Bearer " + PreferenceUtil.getJWT())
+        .addApplicationJsonBody(packet)
+        .build()
+        .getAsJSONObject(new JSONObjectRequestListener() {
+            @Override
+            public void onResponse(JSONObject response) {
+                callback.onSuccess();
+            }
+        });
+}
+```
+
+## Messenger UI
+
+The `MessengerActivity` displays all conversations:
+
+```java activities/Messenger/MessengerActivity.java
+public class MessengerActivity extends AppCompatActivity {
+    ActivityMessangerBinding mainXml;
+    ArrayList<HistorySchema> historylist;
+    HistoryListAdapter adapter;
+    UsersMessageHistoryProfileViewModel historyCardViewModel;
+    List<ConvMessageCounter> unreadCountList;
+    
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        mainXml = ActivityMessangerBinding.inflate(getLayoutInflater());
+        setContentView(mainXml.getRoot());
+        
+        historyCardViewModel = new ViewModelProvider(MessengerActivity.this)
+            .get(UsersMessageHistoryProfileViewModel.class);
+        
+        historylist = new ArrayList<>();
+        unreadCountList = new ArrayList<>();
+        
+        adapter = new HistoryListAdapter(MessengerActivity.this, model -> {
+            // Navigate to message page
+            Bundle data = new Bundle();
+            data.putString("userid", model.getUserId());
+            data.putString("username", model.getUsername());
+            data.putString("profilePic", model.getProfilePic());
+            data.putString("uuid", model.getUuid());
+            
+            Intent msgPage = new Intent(MessengerActivity.this, 
+                                       MessengerMainMessagePageActivity.class);
+            msgPage.putExtras(data);
+            startActivity(msgPage);
+        }, historylist, unreadCountList);
+        
+        setUpRecyclerView();
+        observeHistory();
+    }
+    
+    private void observeHistory() {
+        historyCardViewModel.getHistory().observe(MessengerActivity.this, 
+            historySchemas -> {
+            historylist.clear();
+            historylist.addAll(historySchemas);
+            adapter.notifyDataSetChanged();
+        });
+        
+        historyCardViewModel.getUnreadPerConversation().observe(MessengerActivity.this, 
+            list -> {
+            if(!list.isEmpty()){
+                unreadCountList.clear();
+                unreadCountList.addAll(list);
+                adapter.notifyDataSetChanged();
+            }
+        });
+    }
+}
+```
+
+## Room Database Schema
+
+```java RoomDb/schemas/MessageSchema.java
+@Entity(tableName = "messages")
+public class MessageSchema {
+    @PrimaryKey
+    @NonNull
+    private String messageUid;
+    private String conversationUid;
+    private String replyToMsgUid;
+    private String senderUuid;
+    private String receiverUuid;
+    private String message;
+    private String type; // "text", "image", "video", "audio"
+    private int deliveryStatus; // 0: sent, 1: delivered, 2: seen
+    private String mediaUrl;
+    private String timestamp;
+    private int uploadProgress;
+    private boolean isDeleted;
+}
+```
+
+## Getting All Chats
+
+```java network_managers/MessageManager.java
+public static void GetAllChatsAssociatedWithUser(
+    NetworkCallbackInterfaceWithJsonObjectDelivery callback){
+    String Url = ApiEndPoints.GET_ALL_CHATS;
+    AndroidNetworking.get(Url)
+        .setPriority(Priority.HIGH)
+        .addHeaders("Authorization", "Bearer " + 
+            Core.getPreference().getString(SharedPreferencesKeys.JWT_TOKEN, "null"))
+        .build()
+        .getAsJSONObject(new JSONObjectRequestListener() {
+            @Override
+            public void onResponse(JSONObject response) {
+                callback.onSuccess(response);
+            }
+        });
+}
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Dual Delivery" icon="network-wired">
+    Messages are sent via both Socket.IO and HTTP to ensure delivery even if WebSocket fails.
+  </Card>
+  
+  <Card title="Local First" icon="database">
+    Messages are immediately saved to local database for instant UI updates.
+  </Card>
+  
+  <Card title="Offline Support" icon="wifi">
+    Messages are queued locally and sent when connection is restored.
+  </Card>
+  
+  <Card title="Status Tracking" icon="check-double">
+    Delivery status updates show sent, delivered, and seen states.
+  </Card>
+</CardGroup>
+
+## Related Features
+
+- [Social Feed](/features/social-feed) - Main content feed with message notifications
+- [Media Creation](/features/media-creation) - Capturing media for messages

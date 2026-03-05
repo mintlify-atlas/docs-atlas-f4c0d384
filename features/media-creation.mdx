@@ -1,0 +1,506 @@
+---
+title: 'Media Creation'
+description: 'Camera integration with CameraX for capturing photos and videos'
+---
+
+## Overview
+
+Threadly uses Android's CameraX library for capturing photos and videos. The media creation system provides a unified camera interface for posts, stories, profile pictures, and messages.
+
+## CameraX Implementation
+
+The `PostAddCameraFragment` provides the core camera functionality:
+
+```java fragments/PostAddCameraFragment.java
+public class PostAddCameraFragment extends Fragment {
+    FragmentPostAddCameraBinding mainXml;
+    boolean isBackCamera = false;
+    boolean isFlashOn = false;
+    ImageCapture imageCapture;
+    Recorder recorder;
+    CameraFragmentInterface callback;
+    
+    public PostAddCameraFragment(CameraFragmentInterface callback) {
+        this.callback = callback;
+    }
+}
+```
+
+## Starting the Camera
+
+```java fragments/PostAddCameraFragment.java
+private void startCamera() {
+    ListenableFuture<ProcessCameraProvider> cameraProviderListenableFuture = 
+        ProcessCameraProvider.getInstance(activity);
+    
+    cameraProviderListenableFuture.addListener(() -> {
+        try {
+            ProcessCameraProvider cameraProvider = 
+                cameraProviderListenableFuture.get();
+            
+            // Select front or back camera
+            CameraSelector cameraSelector = isBackCamera ? 
+                CameraSelector.DEFAULT_BACK_CAMERA : 
+                CameraSelector.DEFAULT_FRONT_CAMERA;
+            
+            // Setup preview
+            Preview preview = new Preview.Builder().build();
+            preview.setSurfaceProvider(
+                mainXml.cameraLivePreview.getSurfaceProvider()
+            );
+            
+            // Setup image capture with max quality
+            imageCapture = new ImageCapture.Builder()
+                .setCaptureMode(CAPTURE_MODE_MAXIMIZE_QUALITY)
+                .setFlashMode(FLASH_MODE_OFF)
+                .build();
+            
+            // Setup video recorder with highest quality
+            recorder = new Recorder.Builder()
+                .setQualitySelector(QualitySelector.from(Quality.HIGHEST))
+                .build();
+            
+            // Bind to lifecycle
+            if (cameraProvider != null) {
+                cameraProvider.unbindAll();
+                cameraProvider.bindToLifecycle(
+                    activity, 
+                    cameraSelector, 
+                    preview, 
+                    imageCapture
+                );
+            }
+        } catch (ExecutionException | InterruptedException e) {
+            throw new RuntimeException(e);
+        }
+    }, ContextCompat.getMainExecutor(activity));
+}
+```
+
+## Capturing Photos
+
+```java fragments/PostAddCameraFragment.java
+mainXml.captureBtn.setOnClickListener(v -> {
+    mainXml.captureBtn.setEnabled(false);
+    
+    // Create output file
+    File photoFile = new File(
+        activity.getFilesDir(), 
+        "threadly" + System.currentTimeMillis() + ".png"
+    );
+    
+    ImageCapture.OutputFileOptions outputFileOptions = 
+        new ImageCapture.OutputFileOptions.Builder(photoFile).build();
+    
+    imageCapture.takePicture(
+        outputFileOptions,
+        ContextCompat.getMainExecutor(activity),
+        new ImageCapture.OnImageSavedCallback() {
+            @Override
+            public void onImageSaved(@NonNull ImageCapture.OutputFileResults outputFileResults) {
+                mainXml.captureBtn.setEnabled(true);
+                // Pass captured image path to callback
+                callback.onCapture(photoFile.getAbsolutePath(), "image");
+            }
+            
+            @Override
+            public void onError(@NonNull ImageCaptureException exception) {
+                mainXml.captureBtn.setEnabled(true);
+                Toast.makeText(activity, "Failed to capture photo", 
+                              Toast.LENGTH_SHORT).show();
+            }
+        }
+    );
+});
+```
+
+## Camera Controls
+
+### Toggle Camera (Front/Back)
+
+```java
+mainXml.toggleCamera.setOnClickListener(v -> {
+    isBackCamera = !isBackCamera;
+    startCamera();
+});
+```
+
+### Toggle Flash
+
+```java
+mainXml.toggleFlash.setOnClickListener(v -> {
+    if(isFlashOn){
+        isFlashOn = false;
+        mainXml.toggleFlash.setImageResource(R.drawable.flash_off_icon);
+        imageCapture.setFlashMode(ImageCapture.FLASH_MODE_OFF);
+    } else {
+        isFlashOn = true;
+        mainXml.toggleFlash.setImageResource(R.drawable.flash_on_icon);
+        imageCapture.setFlashMode(ImageCapture.FLASH_MODE_ON);
+    }
+});
+```
+
+### Close Camera
+
+```java
+mainXml.closeButton.setOnClickListener(v -> activity.onBackPressed());
+```
+
+## Camera Callback Interface
+
+```java interfaces/CameraFragmentInterface.java
+public interface CameraFragmentInterface {
+    void onCapture(String filePath, String type);
+}
+```
+
+## Media Upload
+
+After capturing media, it's uploaded using WorkManager for reliable background processing:
+
+```java workers/UploadMediaWorker.java
+public class UploadMediaWorker extends Worker {
+    String TAG = "uploadError";
+    PostsManager postsManager = new PostsManager();
+    File media;
+    
+    @NonNull
+    @Override
+    public Result doWork() {
+        int notificationCode = (int) Math.round(Math.random() * 9999);
+        Data data = getInputData();
+        
+        // Extract data
+        String type = data.getString("type");
+        String path = data.getString("path");
+        String caption = data.getString("caption");
+        
+        // Create file reference
+        media = new File(path);
+        
+        // Check file existence
+        if (!media.exists()) {
+            return Result.failure();
+        }
+        
+        boolean[] isSuccess = {false};
+        CountDownLatch latch = new CountDownLatch(1);
+        
+        NetworkCallbackInterfaceWithProgressTracking callback = 
+            new NetworkCallbackInterfaceWithProgressTracking() {
+            @Override
+            public void onSuccess(JSONObject response) {
+                showUploadProgressNotification(0, 0, false, true, notificationCode);
+                media.delete();
+                isSuccess[0] = true;
+                latch.countDown();
+            }
+            
+            @Override
+            public void onError(String err) {
+                showUploadProgressNotification(0, 0, false, false, notificationCode);
+                Log.d(TAG, "onError: " + err);
+                media.delete();
+                isSuccess[0] = false;
+                latch.countDown();
+            }
+            
+            @Override
+            public void progress(long bytesUploaded, long totalBytes) {
+                showUploadProgressNotification(
+                    (int) totalBytes, 
+                    (int) bytesUploaded, 
+                    true, 
+                    isSuccess[0], 
+                    notificationCode
+                );
+            }
+        };
+        
+        // Upload based on type
+        if(type.equals("image")){
+            postsManager.uploadImagePost(media, caption, callback);
+        } else {
+            postsManager.uploadVideoPost(media, caption, callback);
+        }
+        
+        try {
+            latch.await();
+        } catch (InterruptedException e) {
+            return Result.failure();
+        }
+        
+        return isSuccess[0] ? Result.success() : Result.failure();
+    }
+}
+```
+
+## Upload Progress Notification
+
+```java workers/UploadMediaWorker.java
+private void showUploadProgressNotification(int max, int current, 
+                                           boolean uploading, 
+                                           boolean isSuccess, 
+                                           int notificationCode){
+    NotificationCompat.Builder builder = 
+        new NotificationCompat.Builder(Threadly.getGlobalContext())
+        .setChannelId(Constants.MEDIA_UPLOAD_CHANNEL.toString())
+        .setContentTitle("Uploading media")
+        .setSmallIcon(R.drawable.splash);
+    
+    if(uploading){
+        builder.setOngoing(true)
+               .setProgress(max, current, false)
+               .setOnlyAlertOnce(true);
+    } else {
+        builder.setOngoing(false)
+               .setProgress(0, 0, false)
+               .setOnlyAlertOnce(false);
+        
+        if(isSuccess){
+            builder.setContentTitle("Upload complete")
+                   .setContentText("Your post is now live");
+        } else {
+            builder.setContentTitle("Upload failed")
+                   .setContentText("Failed to upload media");
+        }
+    }
+    
+    NotificationManagerCompat notificationManager = 
+        NotificationManagerCompat.from(Threadly.getGlobalContext());
+    notificationManager.notify(notificationCode, builder.build());
+}
+```
+
+## Scheduling Upload Work
+
+```java
+// Create work data
+Data uploadData = new Data.Builder()
+    .putString("type", "image")
+    .putString("path", photoFile.getAbsolutePath())
+    .putString("caption", captionText)
+    .build();
+
+// Create work request
+OneTimeWorkRequest uploadWorkRequest = 
+    new OneTimeWorkRequest.Builder(UploadMediaWorker.class)
+    .setInputData(uploadData)
+    .setConstraints(new Constraints.Builder()
+        .setRequiredNetworkType(NetworkType.CONNECTED)
+        .build())
+    .build();
+
+// Enqueue work
+WorkManager.getInstance(context).enqueue(uploadWorkRequest);
+```
+
+## Media Message Upload
+
+For uploading media in messages:
+
+```java workers/MessageMediaHandlerWorker.java
+public class MessageMediaHandlerWorker extends Worker {
+    @NonNull
+    @Override
+    public Result doWork() {
+        Data data = getInputData();
+        String filePath = data.getString("filePath");
+        String conversationUid = data.getString("conversationUid");
+        String messageUid = data.getString("messageUid");
+        
+        File mediaFile = new File(filePath);
+        
+        if (!mediaFile.exists()) {
+            return Result.failure();
+        }
+        
+        CountDownLatch latch = new CountDownLatch(1);
+        boolean[] success = {false};
+        
+        MessageManager.UploadMsgMedia(
+            mediaFile, 
+            messageUid, 
+            new NetworkCallbackInterfaceWithProgressTracking() {
+            @Override
+            public void onSuccess(JSONObject response) {
+                String mediaUrl = response.optString("url");
+                // Update message in database with media URL
+                updateMessageWithMediaUrl(messageUid, mediaUrl);
+                success[0] = true;
+                latch.countDown();
+            }
+            
+            @Override
+            public void onError(String err) {
+                success[0] = false;
+                latch.countDown();
+            }
+            
+            @Override
+            public void progress(long bytesUploaded, long totalBytes) {
+                // Update progress in database
+                int progress = (int) ((bytesUploaded * 100) / totalBytes);
+                updateMessageProgress(messageUid, progress);
+            }
+        });
+        
+        try {
+            latch.await();
+        } catch (InterruptedException e) {
+            return Result.failure();
+        }
+        
+        return success[0] ? Result.success() : Result.failure();
+    }
+}
+```
+
+## Media Finalizer Fragment
+
+After capturing media, users can preview and edit before posting:
+
+```java fragments/common_ui_pages/Media_Capture_finalizer_fragment.java
+public class Media_Capture_finalizer_fragment extends Fragment {
+    String mediaPath;
+    String mediaType;
+    
+    @Override
+    public View onCreateView(@NonNull LayoutInflater inflater, 
+                            ViewGroup container, 
+                            Bundle savedInstanceState) {
+        // Show preview of captured media
+        if (mediaType.equals("image")) {
+            Glide.with(this)
+                .load(new File(mediaPath))
+                .into(imagePreview);
+        } else {
+            // Show video player
+            ExoplayerUtil.playFromLocalUri(
+                Uri.fromFile(new File(mediaPath)), 
+                videoPlayerView
+            );
+        }
+        
+        // Setup post button
+        postButton.setOnClickListener(v -> {
+            String caption = captionEditText.getText().toString();
+            scheduleUpload(mediaPath, mediaType, caption);
+            activity.finish();
+        });
+        
+        return view;
+    }
+}
+```
+
+## Media Selection from Gallery
+
+```java adapters/mediaExplorerAdapter/AddPostShowMediaAdapter.java
+public class AddPostShowMediaAdapter extends RecyclerView.Adapter<AddPostShowMediaAdapter.ViewHolder> {
+    List<MediaModel> mediaList;
+    Context context;
+    OnMediaClicked callback;
+    
+    @Override
+    public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
+        MediaModel media = mediaList.get(position);
+        
+        // Load thumbnail
+        Glide.with(context)
+            .load(media.getPath())
+            .thumbnail(0.1f)
+            .centerCrop()
+            .into(holder.thumbnail);
+        
+        // Show duration for videos
+        if (media.getType().equals("video")) {
+            holder.duration.setVisibility(View.VISIBLE);
+            holder.duration.setText(formatDuration(media.getDuration()));
+        }
+        
+        holder.itemView.setOnClickListener(v -> 
+            callback.onMediaClicked(media)
+        );
+    }
+}
+```
+
+## Camera Permissions
+
+Before using the camera, permissions must be requested:
+
+```java
+private static final int CAMERA_PERMISSION_REQUEST = 100;
+
+private void requestCameraPermission() {
+    if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) 
+        != PackageManager.PERMISSION_GRANTED) {
+        ActivityCompat.requestPermissions(
+            this,
+            new String[]{Manifest.permission.CAMERA},
+            CAMERA_PERMISSION_REQUEST
+        );
+    } else {
+        startCamera();
+    }
+}
+
+@Override
+public void onRequestPermissionsResult(int requestCode, 
+                                       @NonNull String[] permissions, 
+                                       @NonNull int[] grantResults) {
+    if (requestCode == CAMERA_PERMISSION_REQUEST) {
+        if (grantResults.length > 0 && 
+            grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+            startCamera();
+        } else {
+            Toast.makeText(this, "Camera permission required", 
+                         Toast.LENGTH_SHORT).show();
+            finish();
+        }
+    }
+}
+```
+
+## Use Cases
+
+<CardGroup cols={2}>
+  <Card title="Post Creation" icon="image">
+    Capture or select media for creating new posts on the social feed.
+  </Card>
+  
+  <Card title="Story Upload" icon="clock">
+    Quick capture for ephemeral story content.
+  </Card>
+  
+  <Card title="Profile Picture" icon="user">
+    Update profile picture with camera or gallery selection.
+  </Card>
+  
+  <Card title="Message Media" icon="message">
+    Send photos and videos in direct messages.
+  </Card>
+</CardGroup>
+
+## Best Practices
+
+<Tip>
+Use WorkManager for uploads to ensure they complete even if the app is closed or the device restarts.
+</Tip>
+
+<Warning>
+Always delete temporary files after successful upload to save storage space.
+</Warning>
+
+<Note>
+CameraX automatically handles orientation changes and different device cameras.
+</Note>
+
+## Related Features
+
+- [Social Feed](/features/social-feed) - Viewing uploaded posts
+- [Stories](/features/stories) - Creating and viewing stories
+- [Messaging](/features/messaging) - Sending media in messages
+- [Reels](/features/reels) - Video playback for created content

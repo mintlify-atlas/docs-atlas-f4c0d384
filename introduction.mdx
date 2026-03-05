@@ -1,0 +1,187 @@
+---
+title: Introduction to Threadly
+description: A feature-rich native Android social media application with real-time messaging, stories, and reels built from scratch
+---
+
+# Welcome to Threadly
+
+Threadly is a **native Android social media application** that brings together the best features of modern social platforms. Built with care from scratch, it offers real-time messaging, dynamic feeds, stories, and TikTok-style reels - all in one seamless experience.
+
+<Note>
+  Threadly is currently in MVP stage with active development. Visit the [official website](https://threadlycom.vercel.app) to learn more.
+</Note>
+
+## What Makes Threadly Special?
+
+Threadly stands out as a comprehensive social platform built entirely with native Android technologies. Here's what makes it unique:
+
+<CardGroup cols={2}>
+  <Card title="Real-time Communication" icon="message">
+    Socket.IO-powered instant messaging with FCM fallback for reliable delivery even when offline
+  </Card>
+  <Card title="Rich Media Experience" icon="video">
+    ExoPlayer-powered video playback with intelligent caching for smooth, TikTok-style reels
+  </Card>
+  <Card title="Offline-First Design" icon="database">
+    Room Database ensures you can browse content anytime, even without internet
+  </Card>
+  <Card title="Modern Architecture" icon="code">
+    Clean MVVM architecture with proper separation of concerns and maintainability
+  </Card>
+</CardGroup>
+
+## Key Highlights
+
+### Built with Modern Android Tech
+
+Threadly leverages the latest Android development practices and libraries:
+
+- **Language**: Java (Native Android)
+- **Architecture**: MVVM (Model-View-ViewModel)
+- **Min SDK**: API 29 (Android 10)
+- **Target SDK**: API 36
+- **Version**: 1.2
+
+### Core Technologies
+
+<AccordionGroup>
+  <Accordion title="Networking & Real-time">
+    - **Fast Android Networking** for API calls
+    - **Socket.IO Client** for real-time messaging
+    - **Firebase Cloud Messaging (FCM)** for push notifications
+  </Accordion>
+  
+  <Accordion title="Media & UI">
+    - **ExoPlayer (Media3)** for video playback with DASH support
+    - **CameraX** for custom camera implementation
+    - **Glide & Coil** for efficient image loading
+    - **Material Design** components for modern UI
+  </Accordion>
+  
+  <Accordion title="Data & Persistence">
+    - **Room Database** for local data storage
+    - **SharedPreferences** for user settings
+    - **WorkManager** for background tasks
+  </Accordion>
+</AccordionGroup>
+
+## Quick Stats
+
+<CardGroup cols={3}>
+  <Card title="12+ Activities" icon="window">
+    Dedicated screens for auth, messaging, posts, profiles, and more
+  </Card>
+  <Card title="15+ Network Managers" icon="server">
+    Organized API handling for auth, posts, messages, likes, follows, and more
+  </Card>
+  <Card title="12+ ViewModels" icon="layer-group">
+    Reactive UI logic for feeds, search, messages, notifications, and profiles
+  </Card>
+</CardGroup>
+
+## Project Structure
+
+Threadly follows a clean, organized package structure:
+
+```
+com.rtech.threadly
+├── activities/          # UI screens (Login, Home, Profile, etc.)
+├── fragments/           # Reusable UI sections
+├── adapters/            # RecyclerView adapters for lists
+├── viewmodels/          # MVVM business logic
+├── models/              # Data models (POJOs)
+├── network_managers/    # API repositories
+├── SocketIo/            # Real-time messaging
+├── RoomDb/              # Local database
+├── utils/               # Helper functions
+└── constants/           # App-wide constants
+```
+
+<Tip>
+  The codebase maintains strict separation between UI (activities/fragments), business logic (viewmodels), and data layers (network_managers/RoomDb).
+</Tip>
+
+## Architecture Overview
+
+Threadly implements the **MVVM (Model-View-ViewModel)** pattern:
+
+```java
+// Example: Application class initialization
+public class Threadly extends Application {
+    private static Threadly instance;
+
+    @Override
+    public void onCreate() {
+        super.onCreate();
+        instance = this;
+        Core.init(instance.getApplicationContext());
+        if (Core.getPreference().getBoolean(SharedPreferencesKeys.IS_LOGGED_IN, false)
+                && !Core.getPreference().getBoolean(SharedPreferencesKeys.IS_FCM_TOKEN_UPLOADED, false)) {
+            ReUsableFunctions.updateFcmTokenToServer();
+        }
+    }
+}
+```
+*From: `Threadly.java:13-24`*
+
+### Network Layer Example
+
+The app uses dedicated manager classes for each feature domain:
+
+- `AuthManager.java` - Authentication and user sessions
+- `MessageManager.java` - Direct messaging operations
+- `PostsManager.java` - Feed and post management
+- `StoriesManager.java` - Stories creation and viewing
+- `LikeManager.java` - Post interactions
+- `FollowManager.java` - Social connections
+
+## Getting Started
+
+Ready to explore Threadly? Here's what you can do next:
+
+<CardGroup cols={2}>
+  <Card title="Explore Features" icon="star" href="/features">
+    Discover all the capabilities Threadly offers
+  </Card>
+  <Card title="Setup Guide" icon="rocket" href="/getting-started/installation">
+    Learn how to build and run Threadly locally
+  </Card>
+  <Card title="Architecture Deep Dive" icon="sitemap" href="/architecture/overview">
+    Understand the MVVM pattern and project structure
+  </Card>
+  <Card title="API Reference" icon="book" href="/api/auth-manager">
+    Explore the backend API integration
+  </Card>
+</CardGroup>
+
+## Development Status
+
+Threadly is actively being developed. Current focus areas:
+
+- ✅ Core authentication with OTP verification
+- ✅ Real-time messaging with Socket.IO
+- ✅ Dynamic feed with posts and stories
+- ✅ Reels with ExoPlayer
+- ✅ Basic social interactions (likes, comments, follows)
+- 🚧 Enhanced reels UI with better caching
+- 🚧 Comprehensive notification system
+- 🚧 Advanced privacy controls
+- 🚧 User profile customization
+
+<Warning>
+  This is an MVP version. Some features are still in active development.
+</Warning>
+
+## Community
+
+Threadly is an open-source project. Get involved:
+
+- **GitHub**: [rashidekbal/threadly](https://github.com/rashidekbal/threadly)
+- **Backend**: [threadlyServer](https://github.com/rashidekbal/threadlyServer)
+- **Email**: rtechdevlopment123@gmail.com
+
+---
+
+<Card title="Next: Explore Features" icon="arrow-right" href="/features">
+  Learn about all the features Threadly has to offer
+</Card>

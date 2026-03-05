@@ -1,0 +1,100 @@
+---
+title: Prerequisites
+description: System requirements and tools needed to build and run Threadly
+---
+
+Before you start working with Threadly, ensure your development environment meets the following requirements.
+
+## Development Tools
+
+### Android Studio
+
+Threadly requires the latest version of Android Studio for the best development experience.
+
+- **Recommended**: Android Studio Hedgehog (2023.1.1) or later
+- Download from [developer.android.com](https://developer.android.com/studio)
+
+### Java Development Kit (JDK)
+
+Threadly uses Java 11 for compilation.
+
+- **Required**: JDK 11
+- **Source Compatibility**: JavaVersion.VERSION_11
+- **Target Compatibility**: JavaVersion.VERSION_11
+
+<Note>
+Android Studio typically bundles a compatible JDK. Verify your JDK version in **File > Project Structure > SDK Location**.
+</Note>
+
+## Android SDK Requirements
+
+Threadly targets modern Android devices with the following SDK configuration:
+
+| Requirement | API Level | Android Version |
+|------------|-----------|----------------|
+| **Minimum SDK** | 29 | Android 10.0 |
+| **Target SDK** | 36 | Android 14+ |
+| **Compile SDK** | 36 | Android 14+ |
+
+<Warning>
+Devices running Android versions below 10.0 (API 29) are not supported.
+</Warning>
+
+## Required Permissions
+
+Threadly requires the following Android permissions to function properly:
+
+### Network Permissions
+- `INTERNET` - For API calls and real-time messaging
+- `ACCESS_NETWORK_STATE` - To detect network availability
+
+### Media Permissions
+- `CAMERA` - For capturing photos and videos
+- `RECORD_AUDIO` - For recording video with audio
+- `READ_MEDIA_IMAGES` - For accessing user's photos (Android 13+)
+- `READ_MEDIA_VIDEO` - For accessing user's videos (Android 13+)
+- `READ_MEDIA_VISUAL_USER_SELECTED` - For partial media access
+- `READ_EXTERNAL_STORAGE` - For older Android versions (API ≤ 32)
+- `WRITE_EXTERNAL_STORAGE` - For older Android versions (API ≤ 32)
+
+### Notification Permissions
+- `POST_NOTIFICATIONS` - For push notifications via FCM
+
+## Hardware Features
+
+Threadly requires devices with camera hardware:
+
+```xml
+<uses-feature android:name="android.hardware.camera.any" />
+```
+
+<Note>
+The app uses **CameraX** for camera functionality, which provides broad device compatibility.
+</Note>
+
+## Backend Requirements
+
+Threadly requires a running backend server:
+
+- **Backend Repository**: [threadlyServer](https://github.com/rashidekbal/threadlyServer)
+- **Stack**: Node.js + Express + MySQL
+- **Services**: REST API + Socket.IO for real-time messaging
+
+<Tip>
+You can use the hosted backend at `https://threadlyserver.onrender.com` for testing, or set up your own instance for development.
+</Tip>
+
+## Firebase Requirements
+
+For push notifications to work, you'll need:
+
+- A Firebase project with Cloud Messaging enabled
+- `google-services.json` configuration file
+
+See [Firebase Setup](/getting-started/firebase-setup) for detailed instructions.
+
+## Next Steps
+
+<Card title="Installation" icon="download" href="/getting-started/installation">
+  Clone the repository and set up your development environment
+</Card>

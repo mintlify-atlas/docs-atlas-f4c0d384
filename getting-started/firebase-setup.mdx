@@ -1,0 +1,338 @@
+---
+title: Firebase Setup
+description: Configure Firebase Cloud Messaging for push notifications in Threadly
+---
+
+Threadly uses Firebase Cloud Messaging (FCM) to deliver real-time push notifications when users receive messages, likes, comments, and other interactions while offline.
+
+## Why Firebase?
+
+Threadly's messaging system uses Socket.IO for real-time communication. However, when the app is in the background or closed, Firebase Cloud Messaging acts as a fallback to ensure users never miss important notifications.
+
+<Info>
+**Hybrid Notification System**
+- Socket.IO handles real-time delivery when app is active
+- FCM delivers notifications when app is backgrounded or closed
+</Info>
+
+## Create a Firebase Project
+
+<Steps>
+  <Step title="Go to Firebase Console">
+    Visit [console.firebase.google.com](https://console.firebase.google.com) and sign in with your Google account.
+  </Step>
+  
+  <Step title="Create a new project">
+    - Click **Add project**
+    - Enter a project name (e.g., "Threadly")
+    - Click **Continue**
+  </Step>
+  
+  <Step title="Configure Google Analytics (optional)">
+    - Choose whether to enable Google Analytics
+    - Select an Analytics account or create a new one
+    - Click **Create project**
+  </Step>
+  
+  <Step title="Wait for project creation">
+    Firebase will set up your project. This takes a few seconds.
+  </Step>
+</Steps>
+
+## Add Android App to Firebase
+
+<Steps>
+  <Step title="Add an Android app">
+    From your Firebase project dashboard:
+    - Click the **Android icon** to add an Android app
+    - Or go to **Project settings > General > Your apps**
+  </Step>
+  
+  <Step title="Register your app">
+    Fill in the required information:
+    
+    | Field | Value |
+    |-------|-------|
+    | **Android package name** | `com.rtech.threadly` |
+    | **App nickname** | Threadly (optional) |
+    | **Debug signing certificate SHA-1** | Optional for development |
+    
+    <Note>
+    The package name must exactly match the `applicationId` in your `app/build.gradle` file.
+    </Note>
+  </Step>
+  
+  <Step title="Download google-services.json">
+    - Click **Download google-services.json**
+    - Save the file - you'll need it in the next section
+  </Step>
+  
+  <Step title="Skip the SDK setup steps">
+    Threadly already has Firebase dependencies configured. Click **Next** through the remaining steps and **Continue to console**.
+  </Step>
+</Steps>
+
+## Add google-services.json to Project
+
+<Steps>
+  <Step title="Locate the app directory">
+    In your Threadly project, find the `app/` directory:
+    
+    ```
+    threadly/
+    ├── app/
+    │   ├── src/
+    │   ├── build.gradle
+    │   └── google-services.json  ← Place file here
+    ├── build.gradle
+    └── settings.gradle
+    ```
+  </Step>
+  
+  <Step title="Copy google-services.json">
+    Copy the downloaded `google-services.json` file to the `app/` directory (same level as `app/build.gradle`).
+    
+    <CodeGroup>
+    ```bash macOS/Linux
+    cp ~/Downloads/google-services.json /path/to/threadly/app/
+    ```
+    
+    ```powershell Windows
+    copy %USERPROFILE%\Downloads\google-services.json C:\path\to\threadly\app\
+    ```
+    </CodeGroup>
+  </Step>
+  
+  <Step title="Verify file placement">
+    In Android Studio, you should see `google-services.json` under the `app` module in Project view:
+    
+    ```
+    app
+    ├── manifests
+    ├── java
+    ├── res
+    ├── google-services.json  ✓
+    └── build.gradle
+    ```
+  </Step>
+  
+  <Step title="Sync Gradle">
+    Click **Sync Now** when prompted, or manually sync:
+    - **Windows/Linux**: `Ctrl + Shift + O`
+    - **macOS**: `Cmd + Shift + O`
+  </Step>
+</Steps>
+
+<Warning>
+**Never commit `google-services.json` to public repositories!** 
+
+Add it to your `.gitignore` if your repository is public:
+
+```bash .gitignore
+app/google-services.json
+```
+</Warning>
+
+## Verify Firebase Integration
+
+Threadly already includes the necessary Firebase dependencies and configuration:
+
+### Gradle Plugin
+
+```gradle build.gradle (Project level)
+plugins {
+    alias(libs.plugins.google.gms.google.services) apply false
+}
+```
+
+```gradle app/build.gradle
+plugins {
+    alias(libs.plugins.android.application)
+    alias(libs.plugins.google.gms.google.services)
+}
+```
+
+### Firebase Messaging Dependency
+
+```gradle app/build.gradle
+dependencies {
+    implementation libs.firebase.messaging
+}
+```
+
+### FCM Service Implementation
+
+Threadly includes a custom FCM service:
+
+```xml AndroidManifest.xml
+<service
+    android:name=".services.FcmService"
+    android:exported="true">
+    <intent-filter>
+        <action android:name="com.google.firebase.MESSAGING_EVENT" />
+    </intent-filter>
+</service>
+```
+
+<Check>
+If you've followed all steps, Firebase is now fully integrated!
+</Check>
+
+## Enable Cloud Messaging API
+
+<Steps>
+  <Step title="Navigate to Cloud Messaging">
+    In Firebase Console:
+    - Go to **Project settings > Cloud Messaging**
+    - Or directly visit: `https://console.firebase.google.com/project/YOUR_PROJECT/settings/cloudmessaging`
+  </Step>
+  
+  <Step title="Enable Cloud Messaging API">
+    - Click **Enable** if the API is not yet enabled
+    - Note down your **Server Key** and **Sender ID** for backend configuration
+  </Step>
+</Steps>
+
+## Configure Backend for FCM
+
+Your backend server needs Firebase Admin SDK credentials to send push notifications:
+
+<Steps>
+  <Step title="Generate a private key">
+    In Firebase Console:
+    1. Go to **Project settings > Service accounts**
+    2. Click **Generate new private key**
+    3. Confirm and download the JSON file
+  </Step>
+  
+  <Step title="Add to backend">
+    In your backend repository (threadlyServer):
+    1. Save the JSON file as `serviceAccountKey.json`
+    2. Add it to your `.env` or backend configuration
+    3. Initialize Firebase Admin SDK:
+    
+    ```javascript server.js
+    const admin = require('firebase-admin');
+    const serviceAccount = require('./serviceAccountKey.json');
+    
+    admin.initializeApp({
+      credential: admin.credential.cert(serviceAccount)
+    });
+    ```
+  </Step>
+</Steps>
+
+<Warning>
+**Keep your service account key secure!** Never commit it to version control or expose it publicly.
+</Warning>
+
+## Test Push Notifications
+
+<Steps>
+  <Step title="Run the app">
+    Build and launch Threadly on your device or emulator.
+  </Step>
+  
+  <Step title="Check FCM token generation">
+    Open **Logcat** and filter for:
+    
+    ```
+    tag:FCM OR tag:FcmService
+    ```
+    
+    You should see logs indicating FCM token generation.
+  </Step>
+  
+  <Step title="Send a test notification">
+    From Firebase Console:
+    1. Go to **Cloud Messaging > Send your first message**
+    2. Enter a notification title and text
+    3. Click **Send test message**
+    4. Enter your FCM token (from Logcat)
+    5. Click **Test**
+  </Step>
+  
+  <Step title="Verify notification delivery">
+    - Background the app or close it completely
+    - You should receive a push notification
+    - Tap it to open the app
+  </Step>
+</Steps>
+
+## Notification Permissions
+
+Threadly requests notification permission at runtime (required for Android 13+):
+
+```xml AndroidManifest.xml
+<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+```
+
+Users must grant this permission for push notifications to work.
+
+<Tip>
+**Best Practice**: Request notification permission after the user signs in or when they're about to receive their first message. This provides better context and improves permission grant rates.
+</Tip>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="google-services.json not found">
+    - Ensure file is in `app/` directory, not `app/src/`
+    - File name must be exactly `google-services.json` (case-sensitive)
+    - Perform a Gradle sync after adding the file
+    - Try **File > Invalidate Caches / Restart**
+  </Accordion>
+  
+  <Accordion title="No FCM token generated">
+    - Check internet connection
+    - Verify `google-services.json` matches your package name
+    - Check Logcat for Firebase initialization errors
+    - Ensure Firebase Messaging dependency is included
+  </Accordion>
+  
+  <Accordion title="Notifications not received">
+    - Verify POST_NOTIFICATIONS permission is granted
+    - Check device battery optimization settings
+    - Ensure app is registered with FCM (check Logcat for token)
+    - Verify backend has correct Firebase Admin SDK configuration
+    - Test with Firebase Console test message first
+  </Accordion>
+  
+  <Accordion title="Duplicate class error during build">
+    This usually indicates version conflicts. Ensure consistent Firebase versions:
+    
+    ```gradle libs.versions.toml
+    [versions]
+    firebase-bom = "32.7.0"
+    
+    [libraries]
+    firebase-messaging = { module = "com.google.firebase:firebase-messaging", version.ref = "firebase-bom" }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## FCM Service Customization
+
+Threadly's FCM service is located at:
+
+```
+app/src/main/java/com/rtech/threadly/services/FcmService.java
+```
+
+You can customize notification behavior, handling, and appearance by editing this file.
+
+## Next Steps
+
+<Check>
+**Setup Complete!** You now have a fully configured Threadly development environment.
+</Check>
+
+<CardGroup cols={2}>
+  <Card title="Architecture Overview" icon="sitemap" href="/architecture/overview">
+    Learn about Threadly's MVVM architecture
+  </Card>
+  
+  <Card title="API Reference" icon="code" href="/api/auth-manager">
+    Explore the backend API integration
+  </Card>
+</CardGroup>

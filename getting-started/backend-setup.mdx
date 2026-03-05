@@ -1,0 +1,279 @@
+---
+title: Backend Setup
+description: Configure API endpoints and Socket.IO connection for Threadly
+---
+
+Threadly requires a backend server for authentication, data storage, and real-time messaging. This guide shows you how to set up and configure the backend connection.
+
+## Backend Repository
+
+Threadly's backend is hosted in a separate repository:
+
+<Card title="Threadly Server" icon="github" href="https://github.com/rashidekbal/threadlyServer">
+  Node.js + Express + MySQL backend with Socket.IO support
+</Card>
+
+### Backend Stack
+- **Runtime**: Node.js
+- **Framework**: Express.js
+- **Database**: MySQL
+- **Real-time**: Socket.IO
+- **Push Notifications**: Firebase Cloud Messaging (FCM)
+
+## Configuration Options
+
+You have two options for backend configuration:
+
+<Tabs>
+  <Tab title="Option 1: Use Hosted Backend">
+    ### Use the Hosted Instance
+    
+    The easiest way to get started is using the pre-configured hosted backend:
+    
+    - **API URL**: `https://threadlyserver.onrender.com/api`
+    - **Socket URL**: `https://threadlyserver.onrender.com/`
+    
+    <Note>
+    The debug build variant is pre-configured with these URLs. No changes needed!
+    </Note>
+    
+    <Warning>
+    The hosted backend may have usage limits or slower response times. For production use, deploy your own instance.
+    </Warning>
+  </Tab>
+  
+  <Tab title="Option 2: Local Development">
+    ### Set Up Local Backend
+    
+    For full control and faster development:
+    
+    <Steps>
+      <Step title="Clone the backend repository">
+        ```bash
+        git clone https://github.com/rashidekbal/threadlyServer.git
+        cd threadlyServer
+        ```
+      </Step>
+      
+      <Step title="Install dependencies">
+        ```bash
+        npm install
+        ```
+      </Step>
+      
+      <Step title="Configure environment">
+        Create a `.env` file with your MySQL and Firebase credentials:
+        
+        ```bash .env
+        DB_HOST=localhost
+        DB_USER=your_mysql_user
+        DB_PASSWORD=your_mysql_password
+        DB_NAME=threadly
+        PORT=8001
+        ```
+      </Step>
+      
+      <Step title="Start the server">
+        ```bash
+        npm start
+        ```
+        
+        The server should start on `http://localhost:8001`
+      </Step>
+    </Steps>
+    
+    <Tip>
+    Use a tool like [ngrok](https://ngrok.com/) or [DevTunnels](https://learn.microsoft.com/en-us/azure/developer/dev-tunnels/) to expose your local server to your Android device.
+    </Tip>
+  </Tab>
+</Tabs>
+
+## Update Endpoint Configuration
+
+To point Threadly to your own backend instance, update the build configuration:
+
+<Steps>
+  <Step title="Open app/build.gradle">
+    Navigate to `app/build.gradle` in your Android Studio project.
+  </Step>
+  
+  <Step title="Locate buildTypes section">
+    Find the `buildTypes` block with `debug` and `release` configurations:
+    
+    ```gradle app/build.gradle
+    buildTypes {
+        debug {
+            buildConfigField "String", "BASE_URL",  "\"https://threadlyserver.onrender.com/api\""
+            buildConfigField "String", "SOCKET_URL",  "\"https://threadlyserver.onrender.com/\""
+        }
+        release {
+            buildConfigField "String", "BASE_URL",   "\"https://threadlyserver.onrender.com/api\""
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+    ```
+  </Step>
+  
+  <Step title="Update the URLs">
+    Replace the URLs with your backend endpoints:
+    
+    <CodeGroup>
+    ```gradle Local Server
+    buildTypes {
+        debug {
+            buildConfigField "String", "BASE_URL",  "\"http://10.0.2.2:8001/api\""
+            buildConfigField "String", "SOCKET_URL",  "\"http://10.0.2.2:8001/\""
+        }
+    }
+    ```
+    
+    ```gradle Tunnel (DevTunnels)
+    buildTypes {
+        debug {
+            buildConfigField "String", "BASE_URL",  "\"https://rjwqzfvg-8001.inc1.devtunnels.ms/api\""
+            buildConfigField "String", "SOCKET_URL",  "\"https://rjwqzfvg-8001.inc1.devtunnels.ms/\""
+        }
+    }
+    ```
+    
+    ```gradle Custom Domain
+    buildTypes {
+        debug {
+            buildConfigField "String", "BASE_URL",  "\"https://api.yourapp.com/api\""
+            buildConfigField "String", "SOCKET_URL",  "\"https://api.yourapp.com/\""
+        }
+    }
+    ```
+    </CodeGroup>
+    
+    <Note>
+    - Use `10.0.2.2` for Android emulator to access `localhost` on your machine
+    - For physical devices, use your machine's local IP address (e.g., `192.168.1.x`)
+    - Always include `/api` suffix for `BASE_URL`
+    - Always include trailing `/` for `SOCKET_URL`
+    </Note>
+  </Step>
+  
+  <Step title="Sync Gradle">
+    Click **Sync Now** in the notification bar, or:
+    - **Windows/Linux**: `Ctrl + Shift + O`
+    - **macOS**: `Cmd + Shift + O`
+  </Step>
+  
+  <Step title="Rebuild the app">
+    Click **Build > Rebuild Project** to apply the new configuration.
+  </Step>
+</Steps>
+
+## Accessing BuildConfig Values
+
+The configured URLs are available throughout your app via `BuildConfig`:
+
+```java Java
+import com.rtech.threadly.BuildConfig;
+
+public class ApiService {
+    private static final String BASE_URL = BuildConfig.BASE_URL;
+    private static final String SOCKET_URL = BuildConfig.SOCKET_URL;
+    
+    // Use these constants in your API calls
+}
+```
+
+## Verify Backend Connection
+
+After configuration, verify the connection:
+
+<Steps>
+  <Step title="Run the app">
+    Launch Threadly on your device or emulator.
+  </Step>
+  
+  <Step title="Check Logcat">
+    Open **Logcat** in Android Studio and filter for network requests:
+    
+    ```
+    tag:OkHttp OR tag:Socket.IO
+    ```
+  </Step>
+  
+  <Step title="Test authentication">
+    Try to log in or sign up. Successful requests indicate proper backend connectivity.
+  </Step>
+</Steps>
+
+<Check>
+**Connected successfully?** You're ready to use all of Threadly's features.
+</Check>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Connection timeout / Network error">
+    - Verify backend server is running
+    - Check firewall settings
+    - Ensure URLs are correctly formatted (no typos)
+    - For local development, confirm your device can reach the server
+  </Accordion>
+  
+  <Accordion title="404 Not Found errors">
+    - Verify `BASE_URL` ends with `/api`
+    - Check backend routes are properly configured
+    - Confirm backend database is set up correctly
+  </Accordion>
+  
+  <Accordion title="Socket.IO not connecting">
+    - Ensure `SOCKET_URL` has trailing `/`
+    - Check CORS settings on backend
+    - Verify Socket.IO server is running on the correct port
+    - Check Logcat for Socket.IO connection events
+  </Accordion>
+  
+  <Accordion title="Different URLs for debug/release">
+    Update both `debug` and `release` build types separately:
+    
+    ```gradle
+    buildTypes {
+        debug {
+            buildConfigField "String", "BASE_URL", "\"https://dev.api.com/api\""
+        }
+        release {
+            buildConfigField "String", "BASE_URL", "\"https://api.com/api\""
+        }
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Environment-Specific Configuration
+
+<Tip>
+For team development, consider creating product flavors for different environments:
+
+```gradle
+android {
+    flavorDimensions "environment"
+    productFlavors {
+        dev {
+            dimension "environment"
+            buildConfigField "String", "BASE_URL", "\"https://dev-api.com/api\""
+        }
+        staging {
+            dimension "environment"
+            buildConfigField "String", "BASE_URL", "\"https://staging-api.com/api\""
+        }
+        prod {
+            dimension "environment"
+            buildConfigField "String", "BASE_URL", "\"https://api.com/api\""
+        }
+    }
+}
+```
+</Tip>
+
+## Next Steps
+
+<Card title="Firebase Setup" icon="fire" href="/getting-started/firebase-setup">
+  Configure push notifications for real-time message delivery
+</Card>

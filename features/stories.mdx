@@ -1,0 +1,458 @@
+---
+title: 'Stories'
+description: 'Ephemeral content that disappears after 24 hours'
+---
+
+## Overview
+
+Threadly's Stories feature allows users to share photos and videos that disappear after 24 hours. Stories appear in a horizontal scrollable feed at the top of the home screen.
+
+## Stories Manager
+
+The `StoriesManager` handles all story-related operations:
+
+```java network_managers/StoriesManager.java
+public class StoriesManager {
+    SharedPreferences loginInfo;
+    
+    public StoriesManager(){
+        this.loginInfo = Core.getPreference();
+    }
+    
+    // Add a new story
+    public void AddStory(File media, String Type, 
+                        NetworkCallbackInterfaceWithProgressTracking callback)
+    
+    // Get stories from followed users
+    public void getStories(NetworkCallbackInterfaceWithJsonObjectDelivery callback)
+    
+    // Get stories of a specific user
+    public void getStoriesOf(String Userid, 
+                            NetworkCallbackInterfaceWithJsonObjectDelivery callback)
+    
+    // Get my own stories
+    public void getMyStories(NetworkCallbackInterfaceWithJsonObjectDelivery callback)
+    
+    // Delete a story
+    public void RemoveStory(int storyId, NetworkCallbackInterface callback)
+}
+```
+
+## Adding Stories
+
+### Upload with Progress Tracking
+
+```java network_managers/StoriesManager.java
+public void AddStory(File media, String Type, 
+                    NetworkCallbackInterfaceWithProgressTracking callbackInterface){
+    String Url = ApiEndPoints.ADD_STORY;
+    AndroidNetworking.upload(Url)
+        .addHeaders("Authorization", "Bearer " + 
+            loginInfo.getString(SharedPreferencesKeys.JWT_TOKEN, "null"))
+        .addMultipartFile("media", media)
+        .addMultipartParameter("type", Type)
+        .setPriority(Priority.HIGH)
+        .build()
+        .setUploadProgressListener(new UploadProgressListener() {
+            @Override
+            public void onProgress(long bytesUploaded, long totalBytes) {
+                callbackInterface.progress(bytesUploaded, totalBytes);
+            }
+        })
+        .getAsJSONObject(new JSONObjectRequestListener() {
+            @Override
+            public void onResponse(JSONObject response) {
+                callbackInterface.onSuccess(response);
+            }
+            
+            @Override
+            public void onError(ANError anError) {
+                callbackInterface.onError(anError.getMessage());
+            }
+        });
+}
+```
+
+### Story Upload Activity
+
+Users create stories through `AddStoryActivity`:
+
+```java activities/AddStoryActivity.java
+// After capturing or selecting media
+File mediaFile = new File(mediaPath);
+String type = isImage ? "image" : "video";
+
+StoriesManager storiesManager = new StoriesManager();
+storiesManager.AddStory(mediaFile, type, 
+    new NetworkCallbackInterfaceWithProgressTracking() {
+    @Override
+    public void onSuccess(JSONObject response) {
+        // Story uploaded successfully
+        showUploadProgressNotification(0, 0, false, true, notificationCode);
+        mediaFile.delete();
+        finish();
+    }
+    
+    @Override
+    public void onError(String err) {
+        // Upload failed
+        Toast.makeText(this, "Failed to upload story", Toast.LENGTH_SHORT).show();
+    }
+    
+    @Override
+    public void progress(long bytesUploaded, long totalBytes) {
+        // Update progress UI
+        int progress = (int) ((bytesUploaded * 100) / totalBytes);
+        progressBar.setProgress(progress);
+    }
+});
+```
+
+## Viewing Stories
+
+### Stories Feed Display
+
+Stories appear in a horizontal RecyclerView at the top of the home feed:
+
+```java fragments/homeFragment.java
+// Setup stories RecyclerView
+LinearLayoutManager layoutManager = 
+    new LinearLayoutManager(requireActivity(), LinearLayoutManager.HORIZONTAL, false);
+StatusViewAdapter StoriesAdapter = new StatusViewAdapter(
+    requireActivity(), 
+    storiesData, 
+    (userid, profilePic, list, position) -> 
+        callback.openStoryOf(userid, profilePic, list, position)
+);
+mainXml.storyRecyclerView.setLayoutManager(layoutManager);
+mainXml.storyRecyclerView.setAdapter(StoriesAdapter);
+```
+
+### Loading Stories
+
+```java
+storiesViewModel.getStories().observe(getViewLifecycleOwner(), storiesModels -> {
+    if(storiesModels.isEmpty()){
+        mainXml.storiesShimmer.setVisibility(View.GONE);
+    } else {
+        storiesData.clear();
+        storiesData.addAll(storiesModels);
+        StoriesAdapter.notifyDataSetChanged();
+        mainXml.storiesShimmer.setVisibility(View.GONE);
+        mainXml.storyRecyclerView.setVisibility(View.VISIBLE);
+    }
+});
+```
+
+## My Stories
+
+Users can view and manage their own stories:
+
+```java fragments/homeFragment.java
+// Load my stories
+storiesViewModel.getMyStories().observe(getViewLifecycleOwner(), storyMediaModels -> {
+    if(!storyMediaModels.isEmpty()){
+        // User has active stories - show colored ring
+        mainXml.StoryOuterBorderColor.setBackground(
+            AppCompatResources.getDrawable(requireActivity(), R.drawable.red_circle)
+        );
+        mainXml.addStorySymbol.setVisibility(View.GONE);
+        mainXml.MyStoryUsername.setText(R.string.your_story);
+        mainXml.myStoryLayoutMain.setVisibility(View.VISIBLE);
+    } else {
+        // No stories - show add button
+        mainXml.myStoryLayoutMain.setVisibility(View.VISIBLE);
+        mainXml.addStorySymbol.setVisibility(View.VISIBLE);
+    }
+});
+```
+
+### My Story Click Handler
+
+```java
+private void setMyStoryClickCallback(String userid, String profile) {
+    mainXml.myStoryLayoutMain.setOnClickListener(v -> {
+        if(mainXml.addStorySymbol.getVisibility() == View.VISIBLE){
+            // Add new story
+            Intent intent = new Intent(requireActivity(), AddStoryActivity.class);
+            intent.putExtra("title", "New Story");
+            startActivity(intent);
+        } else {
+            // View my stories
+            callback.openStoryOf(userid, profile, new ArrayList<>(), 0);
+        }
+    });
+}
+```
+
+## Fetching Stories
+
+### Get All Stories
+
+```java network_managers/StoriesManager.java
+public void getStories(
+    NetworkCallbackInterfaceWithJsonObjectDelivery callback){
+    String Url = ApiEndPoints.GET_STORIES;
+    AndroidNetworking.get(Url)
+        .setPriority(Priority.HIGH)
+        .addHeaders("Authorization", "Bearer " + 
+            loginInfo.getString(SharedPreferencesKeys.JWT_TOKEN, "null"))
+        .build()
+        .getAsJSONObject(new JSONObjectRequestListener() {
+            @Override
+            public void onResponse(JSONObject response) {
+                callback.onSuccess(response);
+            }
+            
+            @Override
+            public void onError(ANError anError) {
+                callback.onError(anError.getMessage());
+            }
+        });
+}
+```
+
+### Get User's Stories
+
+```java
+public void getStoriesOf(String Userid, 
+                        NetworkCallbackInterfaceWithJsonObjectDelivery callback){
+    String Url = ApiEndPoints.GET_STORIES + Userid;
+    AndroidNetworking.get(Url)
+        .setPriority(Priority.HIGH)
+        .addHeaders("Authorization", "Bearer " + 
+            loginInfo.getString(SharedPreferencesKeys.JWT_TOKEN, "null"))
+        .build()
+        .getAsJSONObject(new JSONObjectRequestListener() {
+            @Override
+            public void onResponse(JSONObject response) {
+                callback.onSuccess(response);
+            }
+        });
+}
+```
+
+### Get My Stories
+
+```java
+public void getMyStories(
+    NetworkCallbackInterfaceWithJsonObjectDelivery callback){
+    String Url = ApiEndPoints.GET_MY_STORIES;
+    AndroidNetworking.get(Url)
+        .setPriority(Priority.HIGH)
+        .addHeaders("Authorization", "Bearer " + 
+            loginInfo.getString(SharedPreferencesKeys.JWT_TOKEN, "null"))
+        .build()
+        .getAsJSONObject(new JSONObjectRequestListener() {
+            @Override
+            public void onResponse(JSONObject response) {
+                callback.onSuccess(response);
+            }
+        });
+}
+```
+
+## Deleting Stories
+
+```java network_managers/StoriesManager.java
+public void RemoveStory(int storyId, NetworkCallbackInterface callbackInterface){
+    String URL = ApiEndPoints.DELETE_STORY + Integer.toString(storyId);
+    AndroidNetworking.delete(URL)
+        .addHeaders("Authorization", "Bearer " + 
+            loginInfo.getString(SharedPreferencesKeys.JWT_TOKEN, null))
+        .setPriority(Priority.HIGH)
+        .build()
+        .getAsJSONObject(new JSONObjectRequestListener() {
+            @Override
+            public void onResponse(JSONObject response) {
+                callbackInterface.onSuccess();
+            }
+            
+            @Override
+            public void onError(ANError anError) {
+                callbackInterface.onError(anError.toString());
+            }
+        });
+}
+```
+
+## Story Viewer UI
+
+Stories are viewed in a full-screen ViewPager:
+
+```java
+// Story viewer with swipe navigation
+StoriesViewpagerAdapter adapter = new StoriesViewpagerAdapter(
+    this, 
+    storyList, 
+    currentPosition
+);
+viewPager.setAdapter(adapter);
+viewPager.setCurrentItem(currentPosition);
+```
+
+### Story Playback
+
+Video stories use ExoPlayer with no-loop mode:
+
+```java fragments/storiesFragment/UploadStoryFinalFragment.java
+// Play story video
+ExoplayerUtil.playNoLoop(Uri.parse(storyUrl), playerView);
+
+// Auto-advance to next story when video ends
+exoplayer.addListener(new Player.Listener() {
+    @Override
+    public void onPlaybackStateChanged(int state) {
+        if (state == Player.STATE_ENDED) {
+            // Move to next story
+            viewPager.setCurrentItem(viewPager.getCurrentItem() + 1);
+        }
+    }
+});
+```
+
+### Story Progress Indicators
+
+Multiple stories from one user show progress bars:
+
+```java
+// Show progress bars for each story segment
+LinearLayout progressBarsContainer = findViewById(R.id.progress_bars);
+for (int i = 0; i < storyCount; i++) {
+    ProgressBar progressBar = new ProgressBar(this, null, 
+        android.R.attr.progressBarStyleHorizontal);
+    progressBar.setMax(100);
+    progressBarsContainer.addView(progressBar);
+}
+
+// Animate current story progress
+ValueAnimator animator = ValueAnimator.ofInt(0, 100);
+animator.setDuration(5000); // 5 seconds per story
+animator.addUpdateListener(animation -> {
+    int progress = (int) animation.getAnimatedValue();
+    currentProgressBar.setProgress(progress);
+});
+animator.start();
+```
+
+## Story Model
+
+```java models/StoryMediaModel.java
+public class StoryMediaModel {
+    private int storyId;
+    private String userid;
+    private String username;
+    private String profilePic;
+    private String mediaUrl;
+    private String type; // "image" or "video"
+    private String creationTime;
+    private boolean isSeen;
+    
+    // Getters and setters
+}
+```
+
+## Stories ViewModel
+
+```java viewmodels/StoriesViewModel.java
+public class StoriesViewModel extends ViewModel {
+    private MutableLiveData<List<StoriesModel>> stories;
+    private MutableLiveData<List<StoryMediaModel>> myStories;
+    private StoriesManager storiesManager;
+    
+    public void loadStories() {
+        storiesManager.getStories(
+            new NetworkCallbackInterfaceWithJsonObjectDelivery() {
+            @Override
+            public void onSuccess(JSONObject response) {
+                // Parse and update LiveData
+                List<StoriesModel> storyList = parseStories(response);
+                stories.postValue(storyList);
+            }
+        });
+    }
+    
+    public void loadMyStories() {
+        storiesManager.getMyStories(
+            new NetworkCallbackInterfaceWithJsonObjectDelivery() {
+            @Override
+            public void onSuccess(JSONObject response) {
+                List<StoryMediaModel> myStoryList = parseMyStories(response);
+                myStories.postValue(myStoryList);
+            }
+        });
+    }
+    
+    public LiveData<List<StoriesModel>> getStories() {
+        return stories;
+    }
+    
+    public LiveData<List<StoryMediaModel>> getMyStories() {
+        return myStories;
+    }
+}
+```
+
+## Story Callback Interface
+
+```java interfaces/StoryOpenCallback.java
+public interface StoryOpenCallback {
+    void openStoryOf(String userid, String profilePic, 
+                    List<StoryMediaModel> stories, int position);
+}
+```
+
+## Visual Indicators
+
+<CardGroup cols={2}>
+  <Card title="Unviewed Stories" icon="circle">
+    Stories you haven't seen yet are highlighted with a colored ring (gradient or solid color).
+  </Card>
+  
+  <Card title="Viewed Stories" icon="circle-check">
+    Stories you've already watched appear with a gray ring.
+  </Card>
+  
+  <Card title="Your Story" icon="plus">
+    Your story shows your profile picture with a + icon if you haven't posted today.
+  </Card>
+  
+  <Card title="Active Story" icon="fire">
+    Your active story shows a colored ring and "Your story" label.
+  </Card>
+</CardGroup>
+
+## Story Features
+
+### Tap Controls
+- **Tap right**: Next story
+- **Tap left**: Previous story
+- **Long press**: Pause playback
+- **Swipe down**: Close story viewer
+
+### Story Options
+For your own stories:
+- Delete story
+- View story statistics
+- Share story
+
+For others' stories:
+- Reply to story
+- Share story
+- Report story
+
+## Best Practices
+
+<Warning>
+Stories automatically expire after 24 hours. The backend handles deletion of expired stories.
+</Warning>
+
+<Tip>
+Preload the next story while the current one is playing for seamless transitions.
+</Tip>
+
+## Related Features
+
+- [Social Feed](/features/social-feed) - Main feed with stories section
+- [Media Creation](/features/media-creation) - Capturing media for stories
+- [Reels](/features/reels) - Similar video playback implementation

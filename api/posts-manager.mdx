@@ -1,0 +1,388 @@
+---
+title: 'PostsManager'
+description: 'Manage posts, media uploads, and content feeds'
+icon: 'images'
+---
+
+## Overview
+
+The `PostsManager` class handles all post-related operations in Threadly, including creating image and video posts, retrieving user posts, managing feeds, and deleting posts. It supports file uploads with progress tracking and pagination for efficient content loading.
+
+## Constructor
+
+```java
+public PostsManager()
+```
+
+Initializes the PostsManager and sets up SharedPreferences for authentication.
+
+## Methods
+
+### uploadImagePost
+
+Uploads an image post with a caption. Provides progress tracking during upload.
+
+```java
+public void uploadImagePost(
+    File imagefile,
+    String caption,
+    NetworkCallbackInterfaceWithProgressTracking callback
+)
+```
+
+<ParamField path="imagefile" type="File" required>
+  Image file to upload
+</ParamField>
+
+<ParamField path="caption" type="String" required>
+  Caption text for the post
+</ParamField>
+
+<ParamField path="callback" type="NetworkCallbackInterfaceWithProgressTracking" required>
+  Callback interface to handle upload progress and response
+</ParamField>
+
+<ResponseField name="response" type="JSONObject">
+  Contains the created post details including post ID and URLs
+</ResponseField>
+
+#### Example
+
+```java
+PostsManager postsManager = new PostsManager();
+File imageFile = new File("/path/to/image.jpg");
+
+postsManager.uploadImagePost(
+    imageFile,
+    "Check out this amazing view!",
+    new NetworkCallbackInterfaceWithProgressTracking() {
+        @Override
+        public void progress(long bytesUploaded, long totalBytes) {
+            int percentage = (int) ((bytesUploaded * 100) / totalBytes);
+            // Update progress UI
+        }
+        
+        @Override
+        public void onSuccess(JSONObject response) {
+            // Post uploaded successfully
+            int postId = response.optInt("postId");
+        }
+        
+        @Override
+        public void onError(String error) {
+            // Handle error
+        }
+    });
+```
+
+### uploadVideoPost
+
+Uploads a video post with a caption. Provides progress tracking during upload.
+
+```java
+public void uploadVideoPost(
+    File videofile,
+    String caption,
+    NetworkCallbackInterfaceWithProgressTracking callback
+)
+```
+
+<ParamField path="videofile" type="File" required>
+  Video file to upload
+</ParamField>
+
+<ParamField path="caption" type="String" required>
+  Caption text for the post
+</ParamField>
+
+<ParamField path="callback" type="NetworkCallbackInterfaceWithProgressTracking" required>
+  Callback interface to handle upload progress and response
+</ParamField>
+
+<ResponseField name="response" type="JSONObject">
+  Contains the created post details including post ID and URLs
+</ResponseField>
+
+#### Example
+
+```java
+PostsManager postsManager = new PostsManager();
+File videoFile = new File("/path/to/video.mp4");
+
+postsManager.uploadVideoPost(
+    videoFile,
+    "My latest adventure!",
+    new NetworkCallbackInterfaceWithProgressTracking() {
+        @Override
+        public void progress(long bytesUploaded, long totalBytes) {
+            // Update progress UI
+        }
+        
+        @Override
+        public void onSuccess(JSONObject response) {
+            // Video uploaded successfully
+        }
+        
+        @Override
+        public void onError(String error) {
+            // Handle error
+        }
+    });
+```
+
+### getPostWithId
+
+Retrieves a specific post by its ID.
+
+```java
+public void getPostWithId(
+    int postId,
+    NetworkCallbackInterfaceWithJsonObjectDelivery callbackInterface
+)
+```
+
+<ParamField path="postId" type="int" required>
+  Unique identifier of the post
+</ParamField>
+
+<ParamField path="callbackInterface" type="NetworkCallbackInterfaceWithJsonObjectDelivery" required>
+  Callback interface to handle the response
+</ParamField>
+
+<ResponseField name="response" type="JSONObject">
+  Post object containing all post details (see Posts_Model.java:23)
+</ResponseField>
+
+#### Example
+
+```java
+PostsManager postsManager = new PostsManager();
+postsManager.getPostWithId(12345, 
+    new NetworkCallbackInterfaceWithJsonObjectDelivery() {
+        @Override
+        public void onSuccess(JSONObject response) {
+            String caption = response.optString("caption");
+            int likeCount = response.optInt("likeCount");
+        }
+        
+        @Override
+        public void onError(String error) {
+            // Handle error
+        }
+    });
+```
+
+### getUserPosts
+
+Retrieves posts for a specific user with pagination support.
+
+```java
+public void getUserPosts(
+    int page,
+    String userId,
+    NetworkCallbackInterfaceJsonObject callbackInterface
+)
+```
+
+<ParamField path="page" type="int" required>
+  Page number for pagination (starts at 0)
+</ParamField>
+
+<ParamField path="userId" type="String" required>
+  User ID whose posts to retrieve
+</ParamField>
+
+<ParamField path="callbackInterface" type="NetworkCallbackInterfaceJsonObject" required>
+  Callback interface to handle the response
+</ParamField>
+
+<ResponseField name="response" type="JSONObject">
+  Array of post objects for the specified user
+</ResponseField>
+
+#### Example
+
+```java
+PostsManager postsManager = new PostsManager();
+postsManager.getUserPosts(0, "user123", 
+    new NetworkCallbackInterfaceJsonObject() {
+        @Override
+        public void onSuccess(JSONObject response) {
+            JSONArray posts = response.optJSONArray("posts");
+            // Display user's posts
+        }
+        
+        @Override
+        public void onError(int errorCode) {
+            // Handle error
+        }
+    });
+```
+
+### getLoggedInUserPost
+
+Retrieves posts for the currently logged-in user with pagination support.
+
+```java
+public void getLoggedInUserPost(
+    int page,
+    NetworkCallbackInterfaceWithJsonObjectDelivery callbackInterface
+)
+```
+
+<ParamField path="page" type="int" required>
+  Page number for pagination (starts at 0)
+</ParamField>
+
+<ParamField path="callbackInterface" type="NetworkCallbackInterfaceWithJsonObjectDelivery" required>
+  Callback interface to handle the response
+</ParamField>
+
+<ResponseField name="response" type="JSONObject">
+  Array of post objects for the logged-in user
+</ResponseField>
+
+### getImageFeed
+
+Retrieves the image feed for the user's home timeline.
+
+```java
+public void getImageFeed(
+    NetworkCallbackInterfaceWithJsonObjectDelivery callback
+)
+```
+
+<ParamField path="callback" type="NetworkCallbackInterfaceWithJsonObjectDelivery" required>
+  Callback interface to handle the response
+</ParamField>
+
+<ResponseField name="response" type="JSONObject">
+  Array of image posts from users the current user follows
+</ResponseField>
+
+#### Example
+
+```java
+PostsManager postsManager = new PostsManager();
+postsManager.getImageFeed(
+    new NetworkCallbackInterfaceWithJsonObjectDelivery() {
+        @Override
+        public void onSuccess(JSONObject response) {
+            JSONArray feed = response.optJSONArray("feed");
+            // Display image feed
+        }
+        
+        @Override
+        public void onError(String error) {
+            // Handle error
+        }
+    });
+```
+
+### getVideoFeed
+
+Retrieves the video feed for the user's home timeline.
+
+```java
+public void getVideoFeed(
+    NetworkCallbackInterfaceWithJsonObjectDelivery callback
+)
+```
+
+<ParamField path="callback" type="NetworkCallbackInterfaceWithJsonObjectDelivery" required>
+  Callback interface to handle the response
+</ParamField>
+
+<ResponseField name="response" type="JSONObject">
+  Array of video posts from users the current user follows
+</ResponseField>
+
+#### Example
+
+```java
+PostsManager postsManager = new PostsManager();
+postsManager.getVideoFeed(
+    new NetworkCallbackInterfaceWithJsonObjectDelivery() {
+        @Override
+        public void onSuccess(JSONObject response) {
+            JSONArray videoFeed = response.optJSONArray("feed");
+            // Display video feed
+        }
+        
+        @Override
+        public void onError(String error) {
+            // Handle error
+        }
+    });
+```
+
+### RemovePost
+
+Deletes a post by its ID.
+
+```java
+public void RemovePost(
+    int postId,
+    NetworkCallbackInterface callbackInterface
+)
+```
+
+<ParamField path="postId" type="int" required>
+  ID of the post to delete
+</ParamField>
+
+<ParamField path="callbackInterface" type="NetworkCallbackInterface" required>
+  Callback interface to handle the response
+</ParamField>
+
+#### Example
+
+```java
+PostsManager postsManager = new PostsManager();
+postsManager.RemovePost(12345, 
+    new NetworkCallbackInterface() {
+        @Override
+        public void onSuccess() {
+            // Post deleted successfully
+        }
+        
+        @Override
+        public void onError(String error) {
+            // Handle error
+        }
+    });
+```
+
+## Post Model Structure
+
+Posts returned by these methods follow the structure defined in Posts_Model.java:23:
+
+- `postId` (int) - Unique post identifier
+- `userId` (String) - ID of the user who created the post
+- `username` (String) - Username of the post creator
+- `userDpUrl` (String) - Profile picture URL
+- `postUrl` (String) - URL of the post media
+- `caption` (String) - Post caption text
+- `createdAt` (String) - Post creation timestamp
+- `likeCount` (int) - Number of likes
+- `commentCount` (int) - Number of comments
+- `shareCount` (int) - Number of shares
+- `isliked` (Boolean) - Whether current user liked the post
+- `isVideo` (boolean) - Whether the post is a video
+- `isFollowed` (boolean) - Whether current user follows the post creator
+
+## API Endpoints Used
+
+- `POST /api/posts/image` - Upload image post
+- `POST /api/posts/video` - Upload video post
+- `GET /api/posts/{id}` - Get post by ID
+- `GET /api/posts/user/{userId}` - Get user posts
+- `GET /api/feed/images` - Get image feed
+- `GET /api/feed/videos` - Get video feed
+- `DELETE /api/posts/{id}` - Delete post
+
+## Related Components
+
+- [ProfileManager](/api/profile-manager) - User profile management
+- [MessageManager](/api/message-manager) - Messaging functionality
+- See PostsManager.java:24 for implementation details

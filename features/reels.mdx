@@ -1,0 +1,468 @@
+---
+title: 'Reels'
+description: 'Short-form video playback with ExoPlayer integration'
+---
+
+## Overview
+
+Threadly's Reels feature provides a TikTok-style vertical video feed with smooth playback, preloading, and interactive features. Videos are played using ExoPlayer for optimal performance and format support.
+
+## ExoPlayer Utility
+
+The `ExoplayerUtil` class provides a centralized video playback manager:
+
+```java utils/ExoplayerUtil.java
+public class ExoplayerUtil {
+    private static Context cont;
+    private static ExoPlayer exoplayer;
+    private static PlayerView currentPlayerView;
+    private static ExoPlayer preLoader;
+    
+    public static void init(Context context){
+        if(exoplayer == null){
+            exoplayer = new ExoPlayer.Builder(context).build();
+            exoplayer.setRepeatMode(ExoPlayer.REPEAT_MODE_ONE);
+        }
+        cont = context;
+    }
+}
+```
+
+<Note>
+ExoPlayer is initialized once during login and reused throughout the app for efficient memory usage.
+</Note>
+
+## Reels Adapter
+
+The `ReelsAdapter` manages the vertical video feed:
+
+```java adapters/postsAdapters/ReelsAdapter.java
+public class ReelsAdapter extends RecyclerView.Adapter<ReelsAdapter.viewHolder> {
+    ArrayList<Posts_Model> dataList;
+    Context context;
+    LikeManager likeManager;
+    CommentsManager commentsManager;
+    FollowManager followManager;
+    
+    public ReelsAdapter(Context context, ArrayList<Posts_Model> reelsList) {
+        this.dataList = reelsList;
+        this.context = context;
+        this.likeManager = new LikeManager();
+        this.commentsManager = new CommentsManager();
+        this.followManager = new FollowManager();
+    }
+}
+```
+
+## Video Playback
+
+### Playing Reels
+
+```java utils/ExoplayerUtil.java
+@UnstableApi
+public static void play(Uri uri, PlayerView playerView){
+    if(exoplayer != null){
+        // Detach old surface
+        if (currentPlayerView != null) {
+            currentPlayerView.setPlayer(null);
+        }
+        currentPlayerView = playerView;
+        
+        // Create media item with caching
+        MediaItem mediaItem = MediaItem.fromUri(uri);
+        MediaSource mediaSource = new ProgressiveMediaSource.Factory(
+            CacheDataSourceUtil.getCacheDataSourceFactory(cont)
+        ).createMediaSource(mediaItem);
+        
+        // Set media and play
+        exoplayer.setMediaSource(mediaSource);
+        playerView.setPlayer(exoplayer);
+        exoplayer.prepare();
+        exoplayer.play();
+    }
+}
+```
+
+### Preloading Next Video
+
+To ensure smooth transitions, the next video is preloaded:
+
+```java adapters/postsAdapters/ReelsAdapter.java
+@Override
+public void onBindViewHolder(@NonNull viewHolder holder, int position) {
+    // Preload next video
+    if(isHavingNext(position)){
+        ExoplayerUtil.preloadReel(Uri.parse(dataList.get(position + 1).getPostUrl()));
+    }
+    
+    holder.videoPlayer_view.setPlayer(null);
+    // ... rest of binding logic
+}
+
+private boolean isHavingNext(int position) {
+    return dataList.size() - 1 > position;
+}
+```
+
+### Preloading Implementation
+
+```java utils/ExoplayerUtil.java
+@OptIn(markerClass = UnstableApi.class)
+public static void preloadReel(Uri uri){
+    if(preLoader != null){
+        preLoader.release();
+    }
+    preLoader = new ExoPlayer.Builder(cont).build();
+    MediaItem mediaItem = MediaItem.fromUri(uri);
+    
+    MediaSource mediaSource = new ProgressiveMediaSource.Factory(
+        CacheDataSourceUtil.getCacheDataSourceFactory(cont)
+    ).createMediaSource(mediaItem);
+    
+    preLoader.setMediaSource(mediaSource);
+    preLoader.prepare();
+    preLoader.setPlayWhenReady(false);
+}
+```
+
+## Playback Controls
+
+### Play/Pause Toggle
+
+```java adapters/postsAdapters/ReelsAdapter.java
+holder.videoPlayer_view.setOnClickListener(v -> {
+    if(holder.isPlaying[0]){
+        ExoplayerUtil.pause();
+        holder.isPlaying[0] = false;
+        holder.play_btn.setVisibility(View.VISIBLE);
+    } else {
+        ExoplayerUtil.resume();
+        holder.isPlaying[0] = true;
+        holder.play_btn.setVisibility(View.GONE);
+    }
+});
+```
+
+### Pause and Resume
+
+```java utils/ExoplayerUtil.java
+public static void pause(){
+    if(exoplayer != null){
+        exoplayer.setPlayWhenReady(false);
+        exoplayer.pause();
+    }
+}
+
+public static void resume(){
+    if(exoplayer != null){
+        exoplayer.setPlayWhenReady(true);
+        exoplayer.play();
+    }
+}
+```
+
+### Mute/Unmute
+
+```java utils/ExoplayerUtil.java
+public static void mute(){
+    if(exoplayer != null){
+        exoplayer.setVolume(0f);
+    }
+}
+
+public static void unMute(){
+    if(exoplayer != null){
+        exoplayer.setVolume(1f);
+    }
+}
+```
+
+## Interactive Features
+
+### Like/Unlike Reels
+
+```java adapters/postsAdapters/ReelsAdapter.java
+holder.like_btn_image.setOnClickListener(v -> {
+    if(!dataList.get(position).isliked){
+        // Like animation
+        holder.like_btn_image.setImageResource(R.drawable.red_heart_active_icon);
+        holder.likes += 1.0;
+        setLikeCount(holder.likes, holder);
+        holder.is_liked = true;
+        dataList.get(position).isliked = true;
+        holder.like_btn_image.setEnabled(false);
+        
+        likeManager.likePost(dataList.get(position).postId, 
+            new NetworkCallbackInterface() {
+            @Override
+            public void onSuccess() {
+                holder.like_btn_image.setEnabled(true);
+            }
+            
+            @Override
+            public void onError(String err) {
+                // Revert on error
+                holder.like_btn_image.setImageResource(R.drawable.heart_inactive);
+                holder.likes -= 1.0;
+                setLikeCount(holder.likes, holder);
+                holder.is_liked = false;
+                dataList.get(position).isliked = false;
+                holder.like_btn_image.setEnabled(true);
+            }
+        });
+    } else {
+        // Unlike
+        likeManager.UnlikePost(dataList.get(position).postId, callback);
+    }
+});
+```
+
+### Comments
+
+```java
+holder.comment_btn_image.setOnClickListener(v -> 
+    new PostCommentsViewerUtil(context)
+        .setUpCommentDialog(dataList.get(position).postId)
+);
+```
+
+### Share
+
+```java
+holder.share_icon_white.setOnClickListener(v -> {
+    PostShareHelperUtil.OpenPostShareDialog(dataList.get(position), context);
+});
+```
+
+### Follow Button
+
+Shows a follow button on reels from users you don't follow:
+
+```java
+if(dataList.get(position).isFollowed || 
+   dataList.get(position).userId.equals(loginInfo.getString(SharedPreferencesKeys.USER_ID, "null"))){
+    holder.followBtn.setVisibility(View.GONE);
+} else {
+    holder.followBtn.setVisibility(View.VISIBLE);
+    holder.followBtn.setOnClickListener(v -> {
+        holder.followBtn.setEnabled(false);
+        holder.followBtn.setVisibility(View.GONE);
+        
+        followManager.follow(dataList.get(position).userId, 
+            new NetworkCallbackInterface() {
+            @Override
+            public void onSuccess() {
+                dataList.get(position).isFollowed = true;
+                holder.followBtn.setEnabled(true);
+                ReUsableFunctions.ShowToast("Following");
+            }
+            
+            @Override
+            public void onError(String err) {
+                holder.followBtn.setVisibility(View.VISIBLE);
+                holder.followBtn.setEnabled(true);
+                ReUsableFunctions.ShowToast("something went wrong..");
+            }
+        });
+    });
+}
+```
+
+## Reel Options Menu
+
+Bottom sheet with additional actions:
+
+```java adapters/postsAdapters/ReelsAdapter.java
+holder.optionDots_white.setOnClickListener(v -> {
+    BottomSheetDialog OptionsDialog = 
+        new BottomSheetDialog(context, R.style.TransparentBottomSheet);
+    OptionsDialog.setContentView(R.layout.posts_action_options_layout);
+    setOptionBtnBehaviour(OptionsDialog, position);
+    OptionsDialog.setCancelable(true);
+    OptionsDialog.show();
+});
+
+private void setOptionBtnBehaviour(BottomSheetDialog OptionsDialog, int position) {
+    LinearLayout downloadBtnLayout = OptionsDialog.findViewById(R.id.download_btn);
+    LinearLayout addFavouriteBtnLayout = OptionsDialog.findViewById(R.id.add_favourite_btn);
+    LinearLayout unfollowBtnLayout = OptionsDialog.findViewById(R.id.unfollow_btn);
+    LinearLayout followBtnLayout = OptionsDialog.findViewById(R.id.follow_btn);
+    LinearLayout reportBtnLayout = OptionsDialog.findViewById(R.id.Report_btn);
+    
+    downloadBtnLayout.setOnClickListener(c -> {
+        DownloadManagerUtil.downloadFromUri(context, 
+            Uri.parse(dataList.get(position).postUrl));
+        OptionsDialog.dismiss();
+    });
+    
+    // ... other options
+}
+```
+
+## ViewHolder Pattern
+
+```java adapters/postsAdapters/ReelsAdapter.java
+public class viewHolder extends RecyclerView.ViewHolder {
+    public PlayerView videoPlayer_view;
+    public ImageView heartIconBig, play_btn, profile_img;
+    public ImageView like_btn_image, comment_btn_image;
+    public ImageView share_icon_white, optionDots_white;
+    TextView username_text, caption_text;
+    TextView likes_count_text, comments_count_text, shares_count_text;
+    boolean is_liked;
+    Double likes;
+    boolean[] isPlaying = {true};
+    AppCompatButton followBtn;
+    
+    public viewHolder(@NonNull View itemView) {
+        super(itemView);
+        videoPlayer_view = itemView.findViewById(R.id.videoPlayer_view);
+        play_btn = itemView.findViewById(R.id.play_btn);
+        profile_img = itemView.findViewById(R.id.profile_img);
+        username_text = itemView.findViewById(R.id.username_text);
+        caption_text = itemView.findViewById(R.id.caption_text);
+        like_btn_image = itemView.findViewById(R.id.like_btn_image);
+        likes_count_text = itemView.findViewById(R.id.likes_count_text);
+        comment_btn_image = itemView.findViewById(R.id.comment_btn_image);
+        comments_count_text = itemView.findViewById(R.id.comments_count_text);
+        share_icon_white = itemView.findViewById(R.id.share_icon_white);
+        shares_count_text = itemView.findViewById(R.id.shares_count_text);
+        optionDots_white = itemView.findViewById(R.id.optionDots_white);
+        followBtn = itemView.findViewById(R.id.FollowBtn);
+        heartIconBig = itemView.findViewById(R.id.heartIconBig);
+    }
+}
+```
+
+## Memory Management
+
+### View Recycling
+
+```java
+@Override
+public void onViewRecycled(@NonNull viewHolder holder) {
+    super.onViewRecycled(holder);
+    holder.videoPlayer_view.setPlayer(null);
+}
+```
+
+### Releasing Resources
+
+```java utils/ExoplayerUtil.java
+@OptIn(markerClass = UnstableApi.class)
+public static void release() {
+    if (exoplayer != null) {
+        exoplayer.release();
+        exoplayer = null;
+    }
+}
+```
+
+## Additional Playback Modes
+
+### No Loop Mode
+
+For stories or single-play videos:
+
+```java utils/ExoplayerUtil.java
+@UnstableApi
+public static void playNoLoop(Uri uri, PlayerView playerView){
+    if(exoplayer != null){
+        exoplayer.setRepeatMode(ExoPlayer.REPEAT_MODE_OFF);
+        // ... rest of playback logic
+    }
+}
+```
+
+### Local File Playback
+
+```java
+@UnstableApi
+public static void play(File file, PlayerView playerView){
+    if(exoplayer != null){
+        if (currentPlayerView != null) {
+            currentPlayerView.setPlayer(null);
+        }
+        currentPlayerView = playerView;
+        MediaItem mediaItem = MediaItem.fromUri(Uri.fromFile(file));
+        exoplayer.setMediaItem(mediaItem);
+        playerView.setPlayer(exoplayer);
+        exoplayer.prepare();
+        exoplayer.play();
+    }
+}
+```
+
+## Playback Information
+
+Get current playback progress:
+
+```java
+public static long[] getPlayingInfo(){
+    return new long[]{
+        exoplayer.getDuration(),
+        exoplayer.getCurrentPosition()
+    };
+}
+
+public static void seekTo(long position){
+    if (exoplayer != null){
+        exoplayer.seekTo(position);
+    }
+}
+```
+
+## Performance Features
+
+<CardGroup cols={2}>
+  <Card title="Video Caching" icon="database">
+    CacheDataSourceFactory caches video chunks for offline playback and faster loading.
+  </Card>
+  
+  <Card title="Preloading" icon="forward">
+    Next video preloads in background for seamless transitions.
+  </Card>
+  
+  <Card title="Single Player Instance" icon="play">
+    One ExoPlayer instance is reused for all videos to save memory.
+  </Card>
+  
+  <Card title="Repeat Mode" icon="repeat">
+    Videos loop automatically for continuous viewing.
+  </Card>
+</CardGroup>
+
+## UI Optimizations
+
+### Count Formatting
+
+Large numbers are formatted with 'k' suffix:
+
+```java
+private void setLikeCount(Double likes, ReelsAdapter.viewHolder holder){
+    if(likes > 1000){
+        likes = likes / 1000;
+        holder.likes_count_text.setText(Integer.toString(likes.intValue()).concat("k"));
+    } else {
+        holder.likes_count_text.setText(Integer.toString(likes.intValue()));
+    }
+}
+```
+
+### Profile Navigation
+
+```java
+holder.profile_img.setOnClickListener(v -> 
+    ReUsableFunctions.openProfile(context, dataList.get(position).userId)
+);
+
+holder.username_text.setOnClickListener(v -> 
+    ReUsableFunctions.openProfile(context, dataList.get(position).userId)
+);
+```
+
+## Related Features
+
+- [Social Feed](/features/social-feed) - Main content feed
+- [Stories](/features/stories) - Ephemeral video content
+- [Media Creation](/features/media-creation) - Recording and uploading videos

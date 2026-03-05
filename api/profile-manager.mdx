@@ -1,0 +1,304 @@
+---
+title: 'ProfileManager'
+description: 'User profile retrieval and management'
+icon: 'user'
+---
+
+## Overview
+
+The `ProfileManager` class handles user profile retrieval operations in Threadly. It provides methods to fetch user profiles by user ID, UUID, or retrieve the currently logged-in user's profile. All profile data includes user information, statistics, and relationship status.
+
+## Constructor
+
+```java
+public ProfileManager()
+```
+
+Initializes the ProfileManager and sets up SharedPreferences for authentication.
+
+## Methods
+
+### GetProfile
+
+Retrieves a user's profile by their user ID.
+
+```java
+public final void GetProfile(
+    String Userid,
+    NetworkCallbackInterfaceJsonObject callback
+)
+```
+
+<ParamField path="Userid" type="String" required>
+  The unique user ID of the profile to retrieve
+</ParamField>
+
+<ParamField path="callback" type="NetworkCallbackInterfaceJsonObject" required>
+  Callback interface to handle the response
+</ParamField>
+
+<ResponseField name="response" type="JSONObject">
+  Profile object containing user information (see Profile_Model.java:3)
+</ResponseField>
+
+#### Example
+
+```java
+ProfileManager profileManager = new ProfileManager();
+profileManager.GetProfile("user123", 
+    new NetworkCallbackInterfaceJsonObject() {
+        @Override
+        public void onSuccess(JSONObject response) {
+            String username = response.optString("username");
+            String bio = response.optString("bio");
+            int followers = response.optInt("followers");
+            int following = response.optInt("following");
+            int posts = response.optInt("posts");
+            boolean isFollowedByMe = response.optBoolean("isFollowedByMe");
+            // Display profile information
+        }
+        
+        @Override
+        public void onError(int errorCode) {
+            // Handle error
+        }
+    });
+```
+
+### GetProfileByUuid
+
+Retrieves a user's profile by their UUID (universally unique identifier).
+
+```java
+public final void GetProfileByUuid(
+    String uuid,
+    NetworkCallbackInterfaceWithJsonObjectDelivery callback
+)
+```
+
+<ParamField path="uuid" type="String" required>
+  The UUID of the user whose profile to retrieve
+</ParamField>
+
+<ParamField path="callback" type="NetworkCallbackInterfaceWithJsonObjectDelivery" required>
+  Callback interface to handle the response
+</ParamField>
+
+<ResponseField name="response" type="JSONObject">
+  Profile object containing user information
+</ResponseField>
+
+#### Example
+
+```java
+ProfileManager profileManager = new ProfileManager();
+profileManager.GetProfileByUuid("550e8400-e29b-41d4-a716-446655440000", 
+    new NetworkCallbackInterfaceWithJsonObjectDelivery() {
+        @Override
+        public void onSuccess(JSONObject response) {
+            String username = response.optString("username");
+            String profilePic = response.optString("profilepic");
+            boolean isPrivate = response.optBoolean("isPrivate");
+            // Display profile information
+        }
+        
+        @Override
+        public void onError(String error) {
+            // Handle error
+        }
+    });
+```
+
+### getLoggedInUserProfile
+
+Retrieves the profile information of the currently logged-in user.
+
+```java
+public final void getLoggedInUserProfile(
+    NetworkCallbackInterfaceWithJsonObjectDelivery callback
+)
+```
+
+<ParamField path="callback" type="NetworkCallbackInterfaceWithJsonObjectDelivery" required>
+  Callback interface to handle the response
+</ParamField>
+
+<ResponseField name="response" type="JSONObject">
+  Profile object containing the logged-in user's information
+</ResponseField>
+
+#### Example
+
+```java
+ProfileManager profileManager = new ProfileManager();
+profileManager.getLoggedInUserProfile(
+    new NetworkCallbackInterfaceWithJsonObjectDelivery() {
+        @Override
+        public void onSuccess(JSONObject response) {
+            // Update UI with current user's profile
+            String userid = response.optString("userid");
+            String username = response.optString("username");
+            String profilepic = response.optString("profilepic");
+            String bio = response.optString("bio");
+            String dob = response.optString("dob");
+            int followers = response.optInt("followers");
+            int following = response.optInt("following");
+            int posts = response.optInt("posts");
+        }
+        
+        @Override
+        public void onError(String error) {
+            // Handle error
+        }
+    });
+```
+
+## Profile Model Structure
+
+Profiles returned by these methods follow the structure defined in Profile_Model.java:3:
+
+### Basic Information
+
+- `userid` (String) - Unique user identifier
+- `username` (String) - User's display name
+- `profilepic` (String) - URL to profile picture
+- `bio` (String) - User's biography/description
+- `dob` (String) - Date of birth
+
+### Statistics
+
+- `followers` (int) - Number of followers
+- `following` (int) - Number of users being followed
+- `posts` (int) - Number of posts created
+
+### Relationship Status
+
+- `isFollowingMe` (boolean) - Whether the user follows the current user
+- `isFollowedByMe` (boolean) - Whether the current user follows this user
+- `isPrivate` (boolean) - Whether the profile is private
+- `isFollowRequestApproved` (boolean) - Whether follow request is approved (for private accounts)
+
+## Usage Examples
+
+### Display User Profile
+
+```java
+ProfileManager profileManager = new ProfileManager();
+
+// Get profile for a specific user
+profileManager.GetProfile("johndoe123", 
+    new NetworkCallbackInterfaceJsonObject() {
+        @Override
+        public void onSuccess(JSONObject response) {
+            // Create Profile_Model from response
+            Profile_Model profile = new Profile_Model(
+                response.optString("userid"),
+                response.optString("username"),
+                response.optString("profilepic"),
+                response.optString("bio"),
+                response.optString("dob"),
+                response.optInt("followers"),
+                response.optInt("following"),
+                response.optInt("posts"),
+                response.optBoolean("isFollowedByMe") ? 1 : 0,
+                response.optBoolean("isFollowingMe") ? 1 : 0,
+                response.optBoolean("isPrivate"),
+                response.optBoolean("isFollowRequestApproved")
+            );
+            
+            // Update UI
+            updateProfileUI(profile);
+        }
+        
+        @Override
+        public void onError(int errorCode) {
+            if (errorCode == 404) {
+                // User not found
+            } else {
+                // Other error
+            }
+        }
+    });
+```
+
+### Check Follow Relationship
+
+```java
+ProfileManager profileManager = new ProfileManager();
+profileManager.GetProfile("targetUser", 
+    new NetworkCallbackInterfaceJsonObject() {
+        @Override
+        public void onSuccess(JSONObject response) {
+            boolean isMutualFollow = 
+                response.optBoolean("isFollowedByMe") && 
+                response.optBoolean("isFollowingMe");
+            
+            if (isMutualFollow) {
+                // Show "Friends" badge
+            } else if (response.optBoolean("isFollowedByMe")) {
+                // Show "Following" button
+            } else {
+                // Show "Follow" button
+            }
+        }
+        
+        @Override
+        public void onError(int errorCode) {
+            // Handle error
+        }
+    });
+```
+
+### Load Current User Profile
+
+```java
+ProfileManager profileManager = new ProfileManager();
+profileManager.getLoggedInUserProfile(
+    new NetworkCallbackInterfaceWithJsonObjectDelivery() {
+        @Override
+        public void onSuccess(JSONObject response) {
+            // Cache user data locally
+            SharedPreferences prefs = getSharedPreferences("UserData", MODE_PRIVATE);
+            prefs.edit()
+                .putString("username", response.optString("username"))
+                .putString("profilepic", response.optString("profilepic"))
+                .putInt("followers", response.optInt("followers"))
+                .apply();
+            
+            // Update profile screen
+            displayCurrentUserProfile(response);
+        }
+        
+        @Override
+        public void onError(String error) {
+            // Handle error
+        }
+    });
+```
+
+## API Endpoints Used
+
+- `GET /api/profile/{userid}` - Get profile by user ID
+- `GET /api/profile/uuid/{uuid}` - Get profile by UUID
+- `GET /api/profile/me` - Get logged-in user's profile
+
+## Error Codes
+
+- `404` - User not found
+- `401` - Unauthorized (invalid or expired token)
+- `403` - Forbidden (private account, not following)
+- `500` - Server error
+
+## Related Components
+
+- [AuthManager](/api/auth-manager) - User authentication
+- [PostsManager](/api/posts-manager) - User's posts
+- [MessageManager](/api/message-manager) - Direct messaging
+- See ProfileManager.java:21 for implementation details
+
+## Notes
+
+- All methods require authentication via JWT token stored in SharedPreferences
+- Profile data is returned as JSONObject for flexibility
+- Use Profile_Model.java:3 to structure the response data
+- Private profiles may return limited information unless the current user follows them

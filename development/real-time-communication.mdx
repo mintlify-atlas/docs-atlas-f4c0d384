@@ -1,0 +1,510 @@
+---
+title: Real-Time Communication
+description: Socket.IO implementation for instant messaging and live updates
+---
+
+## Overview
+
+Threadly uses **Socket.IO** for bidirectional real-time communication between the Android client and Node.js server. This enables instant messaging, live notifications, and real-time status updates without polling.
+
+## Architecture
+
+### Socket.IO Integration
+
+```
+Client (Android)          Server (Node.js)
+     │                         │
+     ├─── Socket.IO Client ────┤
+     │    (v2.0.0)             │
+     │                         │
+     ├─── WebSocket ───────────┤
+     │    Connection           │
+     │                         │
+     └─── FCM Fallback ────────┘
+          (when disconnected)
+```
+
+## SocketManager Implementation
+
+The `SocketManager` class implements the Singleton pattern to maintain a single WebSocket connection throughout the app lifecycle:
+
+```java
+public class SocketManager {
+    private static SocketManager instance;
+    private final Socket msocket;
+    
+    private SocketManager() {
+        try {
+            msocket = IO.socket(ApiEndPoints.SOCKET_ID);
+            // Socket URL: https://threadlyserver.onrender.com
+        } catch (URISyntaxException e) {
+            throw new RuntimeException(e);
+        }
+    }
+    
+    public static synchronized SocketManager getInstance() {
+        if (instance == null) {
+            instance = new SocketManager();
+        }
+        return instance;
+    }
+    
+    public Socket getSocket() {
+        return msocket;
+    }
+    
+    public void connect() {
+        msocket.connect();
+    }
+    
+    public void disconnect() {
+        msocket.disconnect();
+        instance = null;
+    }
+}
+```
+
+Location: `SocketIo/SocketManager.java:1`
+
+### Key Features
+
+| Feature | Implementation |
+|---------|----------------|
+| **Singleton Pattern** | Single connection instance across the app |
+| **Lazy Initialization** | Socket created only when first accessed |
+| **Thread-Safe** | Synchronized getInstance() method |
+| **Clean Disconnect** | Properly closes connection and nullifies instance |
+
+## Connection Management
+
+### Establishing Connection
+
+```java
+// Get socket manager instance
+SocketManager socketManager = SocketManager.getInstance();
+
+// Connect to server
+socketManager.connect();
+
+// Access the socket
+Socket socket = socketManager.getSocket();
+```
+
+### Connection Lifecycle
+
+```java
+// On app launch or user login
+public void onUserLogin() {
+    SocketManager.getInstance().connect();
+    setupSocketListeners();
+}
+
+// On app background or user logout
+public void onUserLogout() {
+    SocketManager.getInstance().disconnect();
+}
+```
+
+### Connection URL
+
+```java
+public static final String SOCKET_ID = "https://threadlyserver.onrender.com";
+```
+
+Location: `constants/ApiEndPoints.java:93`
+
+## Event Emission
+
+The `SocketEmitterEvents` class provides helper methods for emitting events to the server:
+
+### Update Message Seen Status
+
+```java
+public class SocketEmitterEvents {
+    public static void UpdateSeenMsg_status(List<String> MessageUids, 
+                                           String senderUUid, 
+                                           String userid) throws JSONException {
+        JSONObject object = new JSONObject();
+        JSONArray UidsList = new JSONArray();
+        
+        // Add all message UIDs to array
+        for (String uid : MessageUids) {
+            UidsList.put(uid);
+        }
+        
+        // Build payload
+        object.put("senderUUid", senderUUid);
+        object.put("myUserid", userid);
+        object.put("uids", UidsList);
+        
+        // Emit event
+        SocketManager.getInstance()
+            .getSocket()
+            .emit("update_seen_msg_status", object);
+    }
+}
+```
+
+Location: `SocketIo/SocketEmitterEvents.java:9`
+
+### Event Payload Structure
+
+```json
+{
+  "senderUUid": "uuid-of-sender",
+  "myUserid": "current-user-id",
+  "uids": ["msg-uid-1", "msg-uid-2", "msg-uid-3"]
+}
+```
+
+## Event Listening
+
+### Setting Up Listeners
+
+```java
+private void setupSocketListeners() {
+    Socket socket = SocketManager.getInstance().getSocket();
+    
+    // Listen for incoming messages
+    socket.on("new_message", new Emitter.Listener() {
+        @Override
+        public void call(Object... args) {
+            JSONObject data = (JSONObject) args[0];
+            handleNewMessage(data);
+        }
+    });
+    
+    // Listen for message status updates
+    socket.on("message_delivered", new Emitter.Listener() {
+        @Override
+        public void call(Object... args) {
+            JSONObject data = (JSONObject) args[0];
+            updateMessageStatus(data);
+        }
+    });
+    
+    // Listen for typing indicators
+    socket.on("user_typing", new Emitter.Listener() {
+        @Override
+        public void call(Object... args) {
+            JSONObject data = (JSONObject) args[0];
+            showTypingIndicator(data);
+        }
+    });
+    
+    // Connection events
+    socket.on(Socket.EVENT_CONNECT, new Emitter.Listener() {
+        @Override
+        public void call(Object... args) {
+            onSocketConnected();
+        }
+    });
+    
+    socket.on(Socket.EVENT_DISCONNECT, new Emitter.Listener() {
+        @Override
+        public void call(Object... args) {
+            onSocketDisconnected();
+        }
+    });
+}
+```
+
+### Common Socket Events
+
+| Event Name | Direction | Purpose |
+|------------|-----------|----------|
+| `new_message` | Server → Client | Receive new incoming message |
+| `message_delivered` | Server → Client | Message delivery confirmation |
+| `message_seen` | Server → Client | Message read receipt |
+| `update_seen_msg_status` | Client → Server | Mark messages as seen |
+| `user_typing` | Server → Client | Show typing indicator |
+| `user_online` | Server → Client | User online status |
+| `user_offline` | Server → Client | User offline status |
+
+## Message Delivery Flow
+
+### Sending Messages
+
+```java
+// 1. Save message locally with pending status
+MessageSchema message = new MessageSchema(
+    messageUid, conversationId, replyToMsgId,
+    senderId, receiverId, messageText, type,
+    postId, postLink, timestamp, 
+    0,  // deliveryStatus: 0 = pending
+    false
+);
+DataBase.getInstance().MessageDao().insertMessage(message);
+
+// 2. Send via HTTP (primary method)
+JSONObject payload = new JSONObject();
+payload.put("messageUid", messageUid);
+payload.put("message", messageText);
+payload.put("receiverId", receiverId);
+
+MessageManager.sendMessage(payload);
+
+// 3. Server broadcasts via Socket.IO to recipient
+// 4. Receive delivery confirmation via Socket.IO
+// 5. Update local database with new status
+```
+
+Location: `network_managers/MessageManager.java:36`
+
+### Receiving Messages
+
+```java
+// 1. Listen for new_message event
+socket.on("new_message", new Emitter.Listener() {
+    @Override
+    public void call(Object... args) {
+        JSONObject data = (JSONObject) args[0];
+        
+        // 2. Extract message data
+        String msgUid = data.optString("messageUid");
+        String senderId = data.optString("senderUUId");
+        String message = data.optString("message");
+        String timestamp = data.optString("creationTime");
+        
+        // 3. Save to Room database
+        MessageSchema schema = new MessageSchema(
+            msgUid, conversationId, replyToMsgId,
+            senderId, receiverId, message, type,
+            postId, postLink, timestamp,
+            -1,  // deliveryStatus: -1 = delivered but not seen
+            false
+        );
+        
+        DataBase.getInstance().MessageDao().insertMessage(schema);
+        
+        // 4. Emit seen status if chat is open
+        if (isCurrentChatOpen()) {
+            SocketEmitterEvents.UpdateSeenMsg_status(
+                Arrays.asList(msgUid), 
+                senderId, 
+                myUserId
+            );
+        }
+    }
+});
+```
+
+### Message Status Codes
+
+| Status Code | Meaning | Display |
+|-------------|---------|----------|
+| `0` | Pending | Clock icon |
+| `1` | Sent | Single checkmark |
+| `-1` | Delivered | Double checkmark |
+| `-2` | Seen | Blue double checkmark |
+
+## FCM Fallback Mechanism
+
+When the Socket.IO connection is unavailable, Threadly falls back to Firebase Cloud Messaging:
+
+### Architecture
+
+```java
+┌─────────────────────┐
+│   Message Sender    │
+└──────────┬──────────┘
+           │
+           ├─── Socket.IO (Primary)
+           │    │
+           │    ├─── ✓ Online → Instant delivery
+           │    └─── ✗ Offline → HTTP request
+           │
+           └─── FCM (Fallback)
+                │
+                └─── Server sends push notification
+```
+
+### FCM Token Management
+
+```java
+// Update FCM token on server
+public static final String FCM_TOKEN_UPDATE = baseUrl + "/fcm/updateToken/";
+
+// Register FCM token after login
+public void updateFcmToken(String token) {
+    JSONObject payload = new JSONObject();
+    payload.put("fcmToken", token);
+    
+    AndroidNetworking.post(ApiEndPoints.FCM_TOKEN_UPDATE)
+        .addHeaders("Authorization", "Bearer " + getJWT())
+        .addApplicationJsonBody(payload)
+        .build()
+        .getAsJSONObject(/* ... */);
+}
+```
+
+Location: `constants/ApiEndPoints.java:96`
+
+### Push Notification Flow
+
+1. **Sender sends message** via HTTP API
+2. **Server checks recipient status**:
+   - If online (Socket.IO connected) → Instant delivery via WebSocket
+   - If offline → Store message + Send FCM push notification
+3. **Recipient receives notification** and opens app
+4. **App connects to Socket.IO** and fetches pending messages
+5. **Messages synced** from server to local database
+
+## Pending Messages Sync
+
+### Checking for Pending Messages
+
+```java
+public static void checkAndGetPendingMessages(){
+    String url = ApiEndPoints.CHECK_PENDING_MESSAGES;
+    
+    AndroidNetworking.get(url)
+        .setPriority(Priority.HIGH)
+        .addHeaders("Authorization", "Bearer " + getToken())
+        .build()
+        .getAsJSONObject(new JSONObjectRequestListener() {
+            @Override
+            public void onResponse(JSONObject response) {
+                JSONArray data = response.getJSONArray("data");
+                
+                if(data.length() > 0) {
+                    for(int i = 0; i < data.length(); i++){
+                        JSONObject obj = data.optJSONObject(i);
+                        String senderUUid = obj.optString("senderUUid");
+                        int pendingCount = obj.optInt("messagesPending");
+                        
+                        // Fetch pending messages from this sender
+                        getaAndUpdatePendingMessagesFromServer(senderUUid);
+                    }
+                }
+            }
+            
+            @Override
+            public void onError(ANError anError) {
+                Log.d("checkPending", "error: " + anError.toString());
+            }
+        });
+}
+```
+
+Location: `network_managers/MessageManager.java:123`
+
+### Retrieving Pending Messages
+
+```java
+public static void getaAndUpdatePendingMessagesFromServer(String senderUUid) {
+    String url = ApiEndPoints.GET_PENDING_MESSAGES;
+    JSONObject payload = new JSONObject();
+    payload.put("senderUuid", senderUUid);
+    
+    AndroidNetworking.post(url)
+        .addApplicationJsonBody(payload)
+        .build()
+        .getAsJSONObject(new JSONObjectRequestListener() {
+            @Override
+            public void onResponse(JSONObject response) {
+                JSONArray messages = response.optJSONArray("data");
+                
+                // Save each message to local database
+                for(int i = 0; i < messages.length(); i++) {
+                    JSONObject msg = messages.optJSONObject(i);
+                    
+                    String msgUid = msg.optString("messageUid");
+                    String message = msg.optString("message");
+                    String timestamp = msg.optString("creationTime");
+                    
+                    MessageSchema schema = new MessageSchema(/* ... */);
+                    DataBase.getInstance().MessageDao().insertMessage(schema);
+                }
+            }
+            
+            @Override
+            public void onError(ANError anError) {
+                Log.d(TAG, "Error fetching pending messages");
+            }
+        });
+}
+```
+
+Location: `network_managers/MessageManager.java:59`
+
+## Best Practices
+
+### 1. Connection Management
+
+```java
+// ✓ Good: Connect on login
+onUserLogin() {
+    SocketManager.getInstance().connect();
+}
+
+// ✓ Good: Disconnect on logout
+onUserLogout() {
+    SocketManager.getInstance().disconnect();
+}
+
+// ✗ Bad: Multiple connections
+for (int i = 0; i < 5; i++) {
+    SocketManager.getInstance().connect();  // Don't do this!
+}
+```
+
+### 2. Event Listener Cleanup
+
+```java
+// Remove listeners when leaving chat screen
+@Override
+public void onDestroy() {
+    super.onDestroy();
+    Socket socket = SocketManager.getInstance().getSocket();
+    socket.off("new_message");
+    socket.off("message_delivered");
+}
+```
+
+### 3. Thread Safety
+
+```java
+// Always update UI on main thread
+socket.on("new_message", args -> {
+    runOnUiThread(() -> {
+        updateChatUI((JSONObject) args[0]);
+    });
+});
+```
+
+### 4. Error Handling
+
+```java
+socket.on(Socket.EVENT_CONNECT_ERROR, args -> {
+    Log.e(TAG, "Socket connection error");
+    // Fall back to HTTP polling or show offline indicator
+    showOfflineMode();
+});
+```
+
+## Dependency
+
+```toml
+# gradle/libs.versions.toml
+socketIoClient = "2.0.0"
+
+[libraries]
+socket-io-client = { 
+    module = "io.socket:socket.io-client", 
+    version.ref = "socketIoClient" 
+}
+```
+
+```groovy
+// app/build.gradle
+implementation(libs.socket.io.client) {
+    exclude group: 'org.json', module: 'json'
+}
+```
+
+## Related Topics
+
+- [Networking](/development/networking) - HTTP API communication
+- [Offline Support](/development/offline-support) - Message caching and sync
+- [Tech Stack](/development/tech-stack) - Complete technology overview
